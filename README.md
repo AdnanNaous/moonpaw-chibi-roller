@@ -12,7 +12,9 @@ This is a playable first release, developed from Adnan's original Grok pixel pro
 
 Windows: download the portable executable from [Releases](https://github.com/AdnanNaous/moonpaw-chibi-roller/releases). Double-click it; Node, a browser, and an internet connection are not needed to play. F11 toggles fullscreen. The first release is unsigned.
 
-Web and mobile: the same game builds as an offline installable web app and native Capacitor Android/iOS projects. Native mobile compilation needs Android SDK 36/JDK 21 or macOS/Xcode respectively. No physical phone/controller performance claim has been made.
+Android: download the `Android-test.apk` from [Releases](https://github.com/AdnanNaous/moonpaw-chibi-roller/releases/tag/v0.1.0). This is a debug-signed test build for Android 7.0+, with landscape touch controls. It compiled successfully in GitHub Actions; physical phone and controller testing remains pending.
+
+Web and iOS: the same game builds as an offline installable web app, with a native Capacitor iOS project supplied. Native compilation needs Android SDK 36/JDK 21 or macOS/Xcode respectively.
 
 | Action | Keyboard / mouse | Standard controller | Touch |
 | --- | --- | --- | --- |
@@ -65,7 +67,7 @@ The web build goes to `dist/`; Windows output goes to `release/`. The game has n
 - `src/levels.ts`: authored maps and optional routes
 - `src/renderer.ts`: layered 2.5D diorama, original cat and environmental art
 - `src/story.ts`, `src/main.ts`: chapters, endings, UI and credits
-- `src/audio.ts`, `public/audio/`: recorded soundtrack and effects
+- `src/audio.ts`, `public/audio/`: bundled original soundtrack and effects
 - `electron/`, `android/`, `ios/`: application shells
 - `tests/`, `docs/`: verification and design notes
 
