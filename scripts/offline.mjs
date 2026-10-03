@@ -1,0 +1,12 @@
+import { readdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+const assets = (await readdir('dist/assets')).map(name=>`./assets/${name}`);
+const audio = (await readdir('dist/audio')).map(name=>`./audio/${name}`);
+const files = ['./','./index.html','./icon.svg','./icon-192.png','./icon-512.png','./manifest.webmanifest',...assets,...audio];
+const hash = createHash('sha256').update(await readFile('dist/index.html')).digest('hex').slice(0,12);
+await writeFile('dist/sw.js',`const CACHE='moonpaw-${hash}';const FILES=${JSON.stringify(files)};
+self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES))));
+self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('moonpaw-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener('fetch',e=>{if(e.request.method!=='GET'||new URL(e.request.url).origin!==self.location.origin)return;e.respondWith(caches.match(e.request,{ignoreVary:true}).then(hit=>hit||fetch(e.request)));});
+`);
+console.log('Offline cache generated for',assets.length,'bundled assets.');

@@ -1,0 +1,15 @@
+{
+  "platform": "Windows packaged executable",
+  "checks": [
+    "custom protocol",
+    "title",
+    "story advance/skip",
+    "keyboard movement",
+    "jump",
+    "pause",
+    "credits links"
+  ],
+  "moved": 4.685416666666657,
+  "airborne": 1.0696874999999988,
+  "errors": []
+}
