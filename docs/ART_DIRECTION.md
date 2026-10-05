@@ -1,10 +1,10 @@
 # MOONPAW visual direction
 
-MOONPAW is a side-view 2D pixel horror game. The world is drawn at a deliberately low internal resolution and scaled with nearest-neighbor sampling. The camera follows one x/y play plane. The player should always read as a small traveler in a large, indifferent place.
+MOONPAW is a side-view 2D pixel horror game. The world is drawn on a coarse internal grid and enlarged with nearest-neighbor sampling at an integer scale of at least two CSS pixels per cell. Tiny centered margins absorb the remainder instead of stretching cells. The camera follows one x/y play plane and keeps the floor visible during jumps. The player should always read as a small traveler in a large, indifferent place.
 
 The image is built from authored silhouettes first: towers, ribs of iron, rooted trees, prison bars, arches, bridges, a funeral moon, and torn cloth. Black negative space carries the composition. Bone, ash, and dull metal carry the edges; warm red and amber mark danger and fire. Grain and stippling weather the shapes but never stand in for recognizable objects. This is original art informed by dirty-pixel technique and a severe Souls-like mood, without copying specific artwork or characters.
 
-The pilgrim has a narrow animal mask, torn cloak, heavy boots, and a staff. Eyes are tiny points, not a cute facial focus. The short four-pose stride, different rising and falling silhouette, attack stroke, dash ghosts, and death slump must stay legible at mobile size. Feet align with the physics origin. The player, platform edges, pickups, and threat windups remain readable against the darkest scenery.
+The pilgrim is an original 16-by-24 pixel drawing in `src/pixel-art.ts`, cached in an eleven-frame bitmap sheet. Opaque palette cells form the narrow animal mask, torn cloak, heavy boots, staff and chipped blade. Eyes are tiny points. The four-pose stride, rising/falling frames, strike poses, dash ghosts and death slump stay legible at mobile size. Feet align with the physics origin. The player, platform edges, pickups, and threat windups remain readable against the darkest scenery. Scenery silhouettes and light effects still rasterize through Canvas 2D; the reduced grain leaves the pixel shapes visible.
 
 Each chapter has a strong distant landmark and a distinct threat language:
 

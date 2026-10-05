@@ -1,5 +1,13 @@
 import {test,expect} from '@playwright/test';
 test.use({hasTouch:true});
+test('fullscreen button enters and exits fullscreen, and pixels use integer scaling',async({page})=>{
+  await page.goto('/');await page.getByRole('button',{name:'Fullscreen',exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(true);
+  await page.getByRole('button',{name:'Exit fullscreen',exact:true}).click();
+  await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(false);
+  await page.getByRole('button',{name:'Enter the crypt',exact:true}).click();await page.getByRole('button',{name:'Begin now'}).click();
+  const stats=await page.evaluate(()=>(window as any).moonpaw.stats);expect(Number.isInteger(stats.pixelScale)).toBe(true);expect(stats.pixelScale).toBeGreaterThan(1);
+});
 test('story, gameplay input, paused journal/settings, credits and ending choices',async({page})=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('/');await page.getByRole('button',{name:'Enter the crypt',exact:true}).click();

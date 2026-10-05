@@ -4,13 +4,15 @@
 
 A dark 2D pixel platformer by **Adnan Naous**. Guide Noir through the sealed city, recover the witnesses' names, and confront Regent Ilyan. Running, variable-height jumping, wall jumping, rolling and timed strikes share a finite stamina bar. Layered painted scenery, torch pools, fog and particles create depth with planar gameplay.
 
-Version **0.2.0** replaces the first prototype's cute diorama, crowded controls and repeating high-frequency sounds. It is a revised test release. Physical phone/controller testing and human difficulty tuning remain necessary; automated completion proves the routes are possible, not that their challenge is ideal.
+Version **0.2.1** sharpens the pixel art with integer scaling and an original animated bitmap pilgrim, adds visible fullscreen controls, and raises the quiet audio mix. The ten themes and campaign stay intact. Physical phone/controller testing and human difficulty tuning remain necessary; automated completion proves the routes are possible, not that their challenge is ideal.
 
 ![Ten thresholds](docs/screenshots/ten-thresholds.png)
 
 ## Play
 
-Download the Windows ZIP or Android test APK from [Releases](https://github.com/AdnanNaous/moonpaw-chibi-roller/releases). Extract the whole Windows ZIP and run MOONPAW Ashen Vow.exe inside its folder. It opened successfully on the development PC and runs without Node, a browser or internet; F11 toggles fullscreen. The optional single-file portable wrapper is unsigned and was blocked by Application Control on this PC; no protection settings were changed. Android is a debug-signed test build. The old v0.1 release stays available separately.
+Download the Windows ZIP or Android test APK from [Releases](https://github.com/AdnanNaous/moonpaw-chibi-roller/releases). Extract the whole Windows ZIP and run MOONPAW Ashen Vow.exe inside its folder. The package includes its runtime and assets. This v0.2.1 unsigned executable was blocked by Windows Application Control on the development PC; the Electron development shell passed the application checks. No protection settings were changed. Android is a debug-signed test build. Previous releases stay available separately.
+
+Use **Fullscreen** on the title screen, the **⛶** button during play, or **F11** on desktop. Press the same button/key to return to a window. Fullscreen buttons appear where the browser or application supports it. Sound starts on the first interaction; the default volume is 70%, adjustable in Settings. Existing custom volume and mute choices are preserved; the previous 32% default migrates to 70%.
 
 The web build is installable and works offline after its first complete load. Capacitor Android and iOS projects are supplied; Android uses SDK 36/JDK 21, and iOS requires macOS/Xcode. No iOS binary has been built here.
 
@@ -62,7 +64,7 @@ Builds go to `dist/` and `release/`. To reproduce the Windows ZIP, run `pnpm des
 
 - `src/core.ts`, `src/levels.ts`: fixed-step simulation and authored campaign
 - `src/input.ts`, `src/touch.ts`: keyboard, mouse, controller and multi-touch
-- `src/renderer.ts`: original Canvas 2D pixel artwork and effects
+- `src/renderer.ts`, `src/pixel-art.ts`: Canvas 2D scenery, bitmap character and effects
 - `src/story.ts`, `src/main.ts`: narrative, journal, endings and UI
 - `src/audio.ts`, `public/audio/`: original synthesized soundtrack/effects
 - `electron/`, `android/`, `ios/`: application shells

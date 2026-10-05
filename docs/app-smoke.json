@@ -1,15 +1,16 @@
 {
-  "platform": "Windows packaged executable",
+  "platform": "Windows Electron development shell",
   "checks": [
     "custom protocol",
     "title",
+    "fullscreen button and F11 exit",
     "story advance/skip",
     "keyboard movement",
     "jump",
     "pause",
     "credits links"
   ],
-  "moved": 4.655833333333323,
-  "airborne": 1.1320312499999985,
+  "moved": 4.342083333333324,
+  "airborne": 1.0696874999999988,
   "errors": []
 }

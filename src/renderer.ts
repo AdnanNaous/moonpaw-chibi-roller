@@ -1,3 +1,4 @@
+import {createPilgrimSprites} from './pixel-art';
 import type { GameState, Quality, Stage } from './types';
 
 type G = CanvasRenderingContext2D;
@@ -45,8 +46,10 @@ function ring(c: G, x: number, y: number, r: number, color: string, width = 2) {
 
 /** An original pixel-painted, fixed-side-view renderer. Gameplay remains in x/y world coordinates. */
 export class GameRenderer {
-  readonly stats = { fps: 0, drawCalls: 0, triangles: 0 };
+  readonly stats = { fps: 0, drawCalls: 0, triangles: 0, pixelScale:1, width:0, height:0 };
   private readonly canvas: HTMLCanvasElement;
+  private readonly sprites=createPilgrimSprites();
+  private pixelScale=1;
   private readonly screen: G;
   private readonly scene: HTMLCanvasElement;
   private readonly c: G;
@@ -116,12 +119,14 @@ export class GameRenderer {
     // CSS owns the play viewport, including the separate mobile control strip.
     this.canvas.width = cw; this.canvas.height = ch;
     this.screen.imageSmoothingEnabled = false;
-    const logicalHeight = this.quality === 'low' ? 240 : this.quality === 'high' ? 400 : 320;
-    this.height = logicalHeight;
-    this.width = Math.max(180, Math.round(logicalHeight * cw / ch));
+    const logicalHeight = this.quality === 'low' ? 144 : 180;
+    this.pixelScale=Math.max(2,Math.round(ch/logicalHeight));
+    this.height=Math.max(1,Math.floor(ch/this.pixelScale));
+    this.width=Math.max(1,Math.floor(cw/this.pixelScale));
     this.scene.width = this.width; this.scene.height = this.height;
     this.c.imageSmoothingEnabled = false;
     this.unit = this.height / (cw / ch < .85 ? 9.5 : 8.0);
+    this.stats.pixelScale=this.pixelScale;this.stats.width=this.width;this.stats.height=this.height;
     this.buildLayers();
   }
 
@@ -153,7 +158,7 @@ export class GameRenderer {
     const cell = w / 7;
     for (let i = -1; i < 8; i++) {
       const x = i * cell + hash(i * 91 + depth * 31) * cell * .18;
-      const tall = (60 + hash(i * 17 + depth * 43) * 110) * scale;
+      const tall = (60 + hash(i * 17 + depth * 43) * 110) * scale * h/400;
       const width = cell * (.76 + hash(i * 14 + depth) * .48);
       if (depth === 0) this.drawFar(c, theme, x, floor, width, tall, i, base);
       else if (depth === 1) this.drawMiddle(c, theme, x, floor, width, tall, i, base);
@@ -599,59 +604,17 @@ export class GameRenderer {
     this.stats.drawCalls++;
   }
 
-  private drawPilgrim(state: GameState, t: number) {
-    const c = this.c, p = state.player, x = this.X(p.x), y = this.Y(p.y);
-    if (x < -30 || x > this.width + 30) return;
-    const scale = this.unit * 1.1 / 42;
-    c.save(); c.globalAlpha = .36; c.fillStyle = '#010404';
-    c.beginPath(); c.ellipse(x, y + 1, Math.max(7, this.unit * .42), 3, 0, 0, Math.PI * 2); c.fill(); c.restore();
-    c.save(); c.translate(x, y); c.scale(scale * (p.facing < 0 ? -1 : 1), scale);
-    c.translate(-16, -42);
-    const run = p.grounded && Math.abs(p.vx) > .3 && !this.reduced;
-    const stride = run ? [-3, 0, 3, 0][Math.floor(t * 11) % 4] : 0;
-    const float = !p.grounded ? (p.vy > 0 ? -3 : 2) : 0;
-    c.translate(0, float);
-    if (p.dashTime > 0) {
-      c.globalAlpha = .25; c.fillStyle = '#a6c4bd';
-      for (let i = 1; i <= 3; i++) c.fillRect(4 - i * 10, 12 + i * 2, 20, 13);
-      c.globalAlpha = 1;
-    }
-    // Deliberate 32×42 drawn frames: narrow animal mask, torn shroud and weighted boots.
-    c.fillStyle = '#030607';
-    polygon(c, [8, 13, 2, 1, 14, 6, 22, 6, 30, 1, 25, 16], '#060909');
-    polygon(c, [7, 13, 11, 7, 22, 7, 27, 13, 27, 22, 5, 22], '#151b1b');
-    c.fillStyle = '#68716d'; c.fillRect(10, 9, 13, 1); c.fillRect(7, 14, 1, 6); c.fillRect(25, 14, 1, 5);
-    c.fillStyle = '#b9b5a8'; c.fillRect(11, 14, 2, 1); c.fillRect(21, 14, 2, 1);
-    c.fillStyle = '#6d817b'; c.fillRect(13, 15, 1, 1); c.fillRect(20, 15, 1, 1);
-    c.fillStyle = '#3c4844'; c.fillRect(16, 18, 2, 1);
-    c.fillStyle = '#080e0f';
-    polygon(c, [9, 21, 25, 21, 31 + stride, 36, 26, 39, 22, 37, 18, 41, 12, 38, 6 - stride, 40, 3, 37], '#090d0e');
-    polygon(c, [11, 22, 23, 22, 25 + stride, 34, 18, 38, 8 - stride, 34], '#29312f');
-    c.fillStyle = '#555e59'; c.fillRect(11, 26, 12, 1); c.fillRect(12, 29, 8, 1); c.fillRect(9, 33, 2, 3);
-    c.fillStyle = '#101617'; c.fillRect(9 + stride, 36, 6, 5); c.fillRect(20 - stride, 35, 6, 6);
-    c.fillStyle = '#68736e'; c.fillRect(9 + stride, 40, 7, 2); c.fillRect(20 - stride, 40, 7, 2);
-    c.fillStyle = '#774b4b'; c.fillRect(12, 21, 12, 3); c.fillRect(19, 24, 5, 3);
-    polygon(c, [22, 24, 31, 23 + (run ? stride : 0), 29, 27 + (run ? stride : 0), 21, 29], '#633f42');
-    c.fillStyle = '#b59f97'; c.fillRect(12, 21, 8, 1);
-    c.fillStyle = '#69716b';
-    for (let i = 0; i < 24; i++) {
-      const sx = 8 + px(hash(i * 19 + 5) * 17), sy = 25 + px(hash(i * 23 + 4) * 12);
-      c.fillRect(sx, sy, 1, 1);
-    }
-    if (p.attackTime > 0) {
-      const strike = p.attackTime > .11;
-      line(c, 23, 30, strike ? 37 : 43, strike ? 7 : 20, '#cdd5cb', 2);
-      line(c, strike ? 35 : 39, strike ? 5 : 17, strike ? 46 : 50, strike ? 10 : 28, '#bfcdbd', 1);
-      c.fillStyle = '#a9b3a7'; c.fillRect(24, 28, 5, 2);
-      c.globalAlpha = .5; c.fillStyle = '#dee0d3';
-      c.fillRect(strike ? 42 : 47, strike ? 9 : 27, 5, 1); c.globalAlpha = 1;
-    } else {
-      // A worn staff hangs behind the hand, kept off the cat's facial silhouette.
-      line(c, 28, 17, 29, 43, '#79867f', 2);
-      c.fillStyle = '#c1bbb0'; c.fillRect(27, 14, 4, 3);
-    }
-    if (p.deadTime > 0) { c.globalAlpha = .34; polygon(c, [5, 40, 11, 34, 22, 35, 31, 40], '#b2a89d'); }
-    c.restore(); this.stats.drawCalls++;
+  private drawPilgrim(state:GameState,t:number){
+    const c=this.c,p=state.player,x=this.X(p.x),y=this.Y(p.y);
+    if(x < -40 || x > this.width+40)return;
+    const run=p.grounded&&Math.abs(p.vx)>.3&&!this.reduced;
+    const frame=p.deadTime>0?10:p.attackTime>0?(p.attackTime>.11?8:9):p.dashTime>0?7:!p.grounded?(p.vy>0?5:6):run?1+Math.floor(t*10)%4:0;
+    const size=Math.max(24,Math.round(this.unit*1.1*32/24));
+    c.fillStyle='#020606';c.fillRect(x-Math.round(this.unit*.4),y,Math.round(this.unit*.8),2);
+    c.save();c.translate(x,y);if(p.facing<0)c.scale(-1,1);
+    const dx=-Math.round(size/2),dy=-Math.round(size*29/32);
+    if(p.dashTime>0){c.globalAlpha=.18;for(let k=1;k<3;k++)c.drawImage(this.sprites,7*32,0,32,32,dx-k*7,dy,size,size);c.globalAlpha=1;}
+    c.imageSmoothingEnabled=false;c.drawImage(this.sprites,frame*32,0,32,32,dx,dy,size,size);c.restore();this.stats.drawCalls++;
   }
 
   private drawEnemies(state: GameState, t: number) {
@@ -724,14 +687,15 @@ export class GameRenderer {
     const vignette = c.createRadialGradient(w * .5, h * .45, h * .10, w * .5, h * .5, Math.max(w, h) * .68);
     vignette.addColorStop(0, '#00000000'); vignette.addColorStop(.65, '#00000020'); vignette.addColorStop(1, '#000000c0');
     c.fillStyle = vignette; c.fillRect(0, 0, w, h);
-    if (this.noise) { c.save(); c.globalAlpha = this.quality === 'high' ? .42 : .28; c.fillStyle = this.noise; c.fillRect(0, 0, w, h); c.restore(); }
+    if (this.noise) { c.save(); c.globalAlpha = this.quality === 'high' ? .10 : .06; c.fillStyle = this.noise; c.fillRect(0, 0, w, h); c.restore(); }
     // Fine scan lines belong to the low-resolution image, not to CSS.
     c.save(); c.globalAlpha = .045; c.fillStyle = '#000';
     for (let y = 1; y < h; y += 3) c.fillRect(0, y, w, 1);
     c.restore();
-    this.screen.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.screen.fillStyle='#080909';this.screen.fillRect(0,0,this.canvas.width,this.canvas.height);
     this.screen.imageSmoothingEnabled = false;
-    this.screen.drawImage(this.scene, 0, 0, this.canvas.width, this.canvas.height);
+    const dw=this.width*this.pixelScale,dh=this.height*this.pixelScale;
+    this.screen.drawImage(this.scene,Math.floor((this.canvas.width-dw)/2),Math.floor((this.canvas.height-dh)/2),dw,dh);
     void t;
   }
 
@@ -745,7 +709,8 @@ export class GameRenderer {
     const menu = state.mode === 'menu';
     const look = menu ? (this.width / this.height < .85 ? -1.0 : -2.3) : state.player.facing >= 0 ? 1.9 : -1.9;
     const nextX = state.player.x + look;
-    const nextY = state.player.y + (menu ? 2.55 : 2.55);
+    const ground=state.stage.platforms.find(p=>p.h>1&&state.player.x>=p.x&&state.player.x<p.x+p.w)?.y??0;
+    const nextY = ground+2.55+clamp(state.player.y-ground,0,3)*.35;
     const easing = menu || this.reduced ? 1 : 1 - Math.exp(-Math.max(0, dt) * 5.6);
     this.camX += (nextX - this.camX) * easing;
     this.camY += (nextY - this.camY) * easing;

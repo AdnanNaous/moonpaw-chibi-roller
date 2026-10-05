@@ -1,4 +1,4 @@
-/** Original, locally bundled sound. Cues are deliberately scarce and quiet. */
+/** Original, locally bundled sound. Cues are rate-limited with a controlled output mix. */
 const CUES = {
   jump: { gain: .30, gap: .12 },
   dash: { gain: .42, gap: .25 },
@@ -27,7 +27,7 @@ export class AudioDirector {
   private epoch = 0;
   private disposed = false;
   muted = false;
-  volume = .55;
+  volume = .70;
 
   unlock() {
     if (this.disposed) return;
@@ -84,7 +84,7 @@ export class AudioDirector {
       const source = this.context.createBufferSource();
       const gain = this.context.createGain();
       source.buffer = buffer;
-      gain.gain.value = cue.gain;
+      gain.gain.value = cue.gain * 2.4;
       source.connect(gain);
       gain.connect(this.master);
       this.activeCues++;
@@ -105,7 +105,7 @@ export class AudioDirector {
       source.buffer = buffer;
       source.loop = true;
       gain.gain.setValueAtTime(0, this.context.currentTime);
-      gain.gain.linearRampToValueAtTime(.42, this.context.currentTime + 2);
+      gain.gain.linearRampToValueAtTime(1.10, this.context.currentTime + 2);
       source.connect(gain);
       gain.connect(this.master);
       source.start();
