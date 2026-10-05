@@ -13,8 +13,8 @@ app.whenReady().then(() => {
   });
   Menu.setApplicationMenu(null);
   const window = new BrowserWindow({
-    title: 'MOONPAW — Chibi Roller', width: 1440, height: 900, minWidth: 800, minHeight: 500,
-    backgroundColor: '#131229', show: false, autoHideMenuBar: true,
+    title: 'MOONPAW — Ashen Vow', width: 1440, height: 900, minWidth: 800, minHeight: 500,
+    backgroundColor: '#080909', show: false, autoHideMenuBar: true,
     icon: path.join(__dirname, '../dist/icon-512.png'),
     webPreferences: {nodeIntegration: false, contextIsolation: true, sandbox: true}
   });

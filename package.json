@@ -1,8 +1,8 @@
 {
   "name": "moonpaw-chibi-roller",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "A monochrome neon horror platformer through ten handcrafted 2.5D worlds.",
+  "description": "A dark pixel horror pilgrimage through ten dangerous thresholds.",
   "author": "Adnan Naous",
   "type": "module",
   "main": "electron/main.cjs",
@@ -41,7 +41,7 @@
     "compression": "store",
     "electronDist": "node_modules/electron/dist",
     "appId": "com.adnannaous.moonpaw",
-    "productName": "MOONPAW Chibi Roller",
+    "productName": "MOONPAW Ashen Vow",
     "directories": {
       "output": "release"
     },
@@ -59,7 +59,7 @@
       "signAndEditExecutable": false
     },
     "portable": {
-      "artifactName": "MOONPAW-Chibi-Roller-${version}-Windows.exe"
+      "artifactName": "MOONPAW-Ashen-Vow-${version}-Windows.exe"
     }
   }
 }

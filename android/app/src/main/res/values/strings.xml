@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">MOONPAW Chibi Roller</string>
-    <string name="title_activity_main">MOONPAW Chibi Roller</string>
+    <string name="app_name">MOONPAW Ashen Vow</string>
+    <string name="title_activity_main">MOONPAW Ashen Vow</string>
     <string name="package_name">com.adnannaous.moonpaw</string>
     <string name="custom_url_scheme">com.adnannaous.moonpaw</string>
 </resources>

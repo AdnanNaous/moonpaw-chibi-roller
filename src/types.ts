@@ -1,12 +1,13 @@
 export type Quality = 'low' | 'balanced' | 'high';
-export type Theme = 'sakura' | 'sawmill' | 'neon' | 'sky' | 'glitch';
-export interface Platform { id: string; x: number; y: number; w: number; h: number; kind: 'solid' | 'moving' | 'crumble' | 'conveyor'; baseX?: number; baseY?: number; phase?: number; active?: boolean; }
-export interface Hazard { id: string; x: number; y: number; w: number; h: number; kind: 'spikes' | 'saw' | 'laser'; phase?: number; active?: boolean; }
-export interface Pickup { id: string; x: number; y: number; collected: boolean; secret?: boolean; }
+export type Theme = 'crypt' | 'foundry' | 'flood' | 'archives' | 'belfry' | 'orchard' | 'prison' | 'choir' | 'abyss' | 'throne';
+export type Mechanic = 'execution' | 'furnace' | 'flood' | 'memory' | 'wind' | 'stalker' | 'arrows' | 'blades' | 'darkness' | 'warden';
+export interface Platform { id: string; x: number; y: number; w: number; h: number; kind: 'solid' | 'moving' | 'crumble' | 'conveyor' | 'memory'; baseX?: number; baseY?: number; phase?: number; active?: boolean; telegraph?: number; }
+export interface Hazard { id: string; x: number; y: number; w: number; h: number; kind: 'spikes' | 'saw' | 'laser' | 'gate' | 'crusher' | 'tide' | 'hunter' | 'arrow' | 'blade' | 'darkness' | 'warden'; phase?: number; active?: boolean; telegraph?: number; baseX?: number; baseY?: number; }
+export interface Pickup { id: string; x: number; y: number; collected: boolean; secret?: boolean; kind?: 'gem' | 'relic' | 'record'; text?: string; }
 export interface Checkpoint { id: string; x: number; y: number; active: boolean; }
-export interface Stage { id: string; name: string; subtitle: string; theme: Theme; accent: string; description: string; length: number; spawn: {x: number; y: number}; exit: {x: number; y: number}; platforms: Platform[]; hazards: Hazard[]; pickups: Pickup[]; checkpoints: Checkpoint[]; wind: number; }
-export interface Player { x: number; y: number; vx: number; vy: number; grounded: boolean; facing: number; dashTime: number; dashReady: boolean; deadTime: number; wall: number; }
-export interface InputFrame { move: number; jump: boolean; jumpPressed: boolean; dashPressed: boolean; pausePressed: boolean; confirmPressed: boolean; nav?: number; }
+export interface Stage { id: string; name: string; subtitle: string; theme: Theme; mechanic: Mechanic; accent: string; description: string; length: number; spawn: {x: number; y: number}; exit: {x: number; y: number}; platforms: Platform[]; hazards: Hazard[]; pickups: Pickup[]; checkpoints: Checkpoint[]; wind: number; records?: string[]; }
+export interface Player { x: number; y: number; vx: number; vy: number; grounded: boolean; facing: number; dashTime: number; dashReady: boolean; deadTime: number; wall: number; stamina: number; attackTime: number; }
+export interface InputFrame { move: number; jump: boolean; jumpPressed: boolean; dashPressed: boolean; attackPressed?: boolean; pausePressed: boolean; confirmPressed: boolean; nav?: number; }
 export type GameMode = 'menu' | 'playing' | 'paused' | 'complete' | 'ending';
-export interface GameState { mode: GameMode; stageIndex: number; stage: Stage; player: Player; time: number; deaths: number; collected: number; total: number; secrets: number; checkpoint: {x: number; y: number}; event: string; eventId: number; }
+export interface GameState { mode: GameMode; stageIndex: number; stage: Stage; player: Player; time: number; deaths: number; collected: number; total: number; secrets: number; checkpoint: {x: number; y: number}; event: string; eventId: number; relicsRequired: number; relicsCollected: number; bossHealth: number; warning: string; }
 export interface SaveData { unlocked: number; best: Record<string, {time: number; deaths: number; collected: number}>; secrets?: string[]; }

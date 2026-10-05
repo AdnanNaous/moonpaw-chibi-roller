@@ -1,67 +1,89 @@
-export interface Line {speaker:string; text:string;}
-export const CHAPTERS: {tag:string; lines:Line[]; after:string}[] = [
-  {tag:'01 · THE LAST TRAIN LEFT WITHOUT YOU',lines:[
-    {speaker:'NOIR',text:'The last thing I remember is a warm hand. Now the platform is cold. The clock has no hands at all.'},
-    {speaker:'THE PLATFORM',text:'Passenger Noir. Your reflection has boarded without you. Follow the light. Do not follow the footsteps.'},
-    {speaker:'NOIR',text:'There are little pieces of moon on the rails. Something has been breaking the sky.'}
-  ],after:'The first door opens. Behind you, a second pair of paws stops walking.'},
-  {tag:'02 · SOMETHING HERE IS STILL WORKING',lines:[
-    {speaker:'NOIR',text:'The saws turn. The workers don’t. Someone has folded their coats over every chair.'},
-    {speaker:'THE OPERATOR',text:'A city needs light. A city needs fuel. Please keep your questions away from the machinery.'}
-  ],after:'You find a bell with its tongue removed. The silence inside it has a heartbeat.'},
-  {tag:'03 · THE CITY LEARNS YOUR VOICE',lines:[
-    {speaker:'THE RADIO',text:'Good evening, Noir. Good evening, Noir. Good evening, No—'},
-    {speaker:'NOIR',text:'Every sign knows my name. None of them will tell me where I am.'},
-    {speaker:'THE OPERATOR',text:'Names are expensive here. We keep them safe by keeping them out of circulation.'}
-  ],after:'The transmission ends. Your voice continues for three seconds after you stop.'},
-  {tag:'04 · DO NOT LOOK UNDER THE CLOUDS',lines:[
-    {speaker:'NOIR',text:'The towers are hanging from the clouds. I can see the knots.'},
-    {speaker:'THE CHOIR',text:'We used to have names. We used to have windows. We used to be able to close our eyes.'}
-  ],after:'One voice sings the tune your person used to hum. You are not the first one to miss home.'},
-  {tag:'05 · A MISSING PAGE HAS TEETH',lines:[
-    {speaker:'THE OPERATOR',text:'There is nothing beyond this district. If you see a door, it is a fault in the picture.'},
-    {speaker:'NOIR',text:'The fault smells like rain. There is a note scratched under the frame: KEEP THE SMALL THINGS.'}
-  ],after:'For a moment the city loses its outline. In the dark, you see the people it has erased.'},
-  {tag:'06 · A GARDEN THAT REMEMBERS',lines:[
-    {speaker:'NOIR',text:'The flowers are white now. They’re growing from the cracks where the names used to be.'},
-    {speaker:'A SMALL VOICE',text:'They don’t burn us. They forget us. It hurts longer.'},
-    {speaker:'NOIR',text:'Then I’ll remember. Even if I have to carry every piece myself.'}
-  ],after:'You tuck a memory into your scarf. It weighs less than a petal. It makes the whole city heavier.'},
-  {tag:'07 · THE BELLS ARE NOT EMPTY',lines:[
-    {speaker:'THE OPERATOR',text:'I kept the lights on after everyone left. Someone had to. Would you have let the city go dark?'},
-    {speaker:'NOIR',text:'You didn’t keep them here. You kept what was left of them.'}
-  ],after:'The foundry stops for the first time in years. One bell finally rings.'},
-  {tag:'08 · ROOM 351',lines:[
-    {speaker:'NOIR',text:'Every bed has a light above it. Every light has a name inside it.'},
-    {speaker:'THE RADIO',text:'If you hear your own name from an empty room, leave the door closed.'},
-    {speaker:'NOIR',text:'My reflection is sitting in the last bed. It won’t look at me.'}
-  ],after:'Your reflection mouths one word: LISTEN. You cannot tell whether it is a warning.'},
-  {tag:'09 · THERE WAS NEVER A MOON',lines:[
-    {speaker:'THE OPERATOR',text:'That light above us is the exit. I painted it round so nobody would try to open it.'},
-    {speaker:'NOIR',text:'Then why is it opening now?'},
-    {speaker:'THE CHOIR',text:'Because something small has been bringing us back.'}
-  ],after:'The sky tears without a sound. On the other side, morning is waiting.'},
-  {tag:'10 · THE PRICE OF A WAY HOME',lines:[
-    {speaker:'THE OPERATOR',text:'One name can power the door. Give me yours, and they can leave. Keep it, and you can.'},
-    {speaker:'NOIR',text:'A name isn’t fuel. It’s how someone finds you in the dark.'},
-    {speaker:'YOUR REFLECTION',text:'There is another way. But you have to remember who is speaking.'}
-  ],after:'The door is open. For once, the city waits for you to decide.'}
+export interface Line { speaker: string; text: string }
+export interface FieldNote { speaker: string; text: string }
+
+/** Two records per chapter: one at the midpoint and one near the exit. */
+export const FIELD_NOTES: [FieldNote, FieldNote][] = [
+  [{speaker:'GRAVE MARKER',text:'Sera Vale. Bell ringer. Buried with an empty coffin; her name kept the first lamp burning.'},{speaker:'SERA’S SCRATCHES',text:'The dead are not calling us down. Something below is wearing their voices to make us open the gate.'}],
+  [{speaker:'FOUNDRY LEDGER',text:'Forty-seven bell tongues were cast from confiscated nameplates. The workers were paid in hours of warmth.'},{speaker:'WORKER EDA',text:'I hid one tongue in the slag. A bell can carry a warning as well as a command.'}],
+  [{speaker:'FLOOD REGISTER',text:'The lower district was sealed while families were still inside. The water rose after the doors were locked.'},{speaker:'CHILD’S MESSAGE',text:'My brother Tovin taught me to breathe between the bell strokes. I counted until he stopped answering.'}],
+  [{speaker:'ARCHIVIST’S MARGIN',text:'Regent Ilyan ordered the names removed from every map. The streets remained; the people became impossible to find.'},{speaker:'MISSING PAGE',text:'The seal was called mercy. Its engine needed one living name each night. The first belonged to his daughter, Elian.'}],
+  [{speaker:'BELL KEEPER',text:'Each toll makes the city forget a little more. The ropes pull themselves now.'},{speaker:'ELIAN’S PRAYER',text:'Father, if you hear me in the bell, let it go silent. I can bear one death. I cannot bear this forever.'}],
+  [{speaker:'GARDENER’S TAG',text:'The orchard was planted over the unmarked graves. White fruit forms where a name is spoken aloud.'},{speaker:'MARA’S RIBBON',text:'Noir, if you followed the light, I am sorry. I tied this where you would find it. The path home is real, but it asks a price.'}],
+  [{speaker:'CELL SEVEN',text:'The prisoners were made to remember the erased. They were called dangerous because they could still say the names.'},{speaker:'WARDEN’S CONFESSION',text:'I guarded them until my own son was taken for fuel. I unlocked one cell. The Regent locked the whole prison around me.'}],
+  [{speaker:'CHOIR SCORE',text:'There is no hymn here. Ten witnesses speak over one another, trying to say what happened in the flood.'},{speaker:'TENOR’S NOTE',text:'We learned to hold the last word in silence. That silence is the interval the bell cannot command.'}],
+  [{speaker:'ENGINE SCHEMATIC',text:'The false moon is the bell’s mouth. Beneath it waits the first name, split from its body to test the door.'},{speaker:'YOUR REFLECTION',text:'I remember what you were made to forget: you opened the gate once. You ran when you heard Elian inside. I stayed.'}],
+  [{speaker:'REGENT’S LAST ORDER',text:'If the witnesses are named together, the engine must release them. The bell will break. Nothing it preserved will survive unchanged.'},{speaker:'ELIAN’S VOICE',text:'Do not save my father from grief. Let him feel it. Then let us leave.'}]
 ];
+
+export const CHAPTERS: {tag:string; lines:Line[]; after:string}[] = [
+  {tag:'01 · THE CRYPT',lines:[
+    {speaker:'NOIR',text:'Mara’s ribbon led me beneath the city. These graves have dates, but someone scraped away every name.'},
+    {speaker:'SERA',text:'The bell began when my coffin was still empty. It speaks with the dead because the living would know it lies.'},
+    {speaker:'NOIR',text:'Then I will take a name out of this place. One is enough to prove they were here.'}
+  ],after:'Sera Vale. You carry her name beyond the gate. A bell far below answers once.'},
+  {tag:'02 · THE FOUNDRY',lines:[
+    {speaker:'NOIR',text:'The furnaces are cold. The hammers still fall. The chains move when no one pulls them.'},
+    {speaker:'EDA',text:'They melted our nameplates into bell tongues. A city without names could be told anything.'},
+    {speaker:'NOIR',text:'There is a tongue hidden in the slag. Eda left us a way to make it speak differently.'}
+  ],after:'The stolen tongue rings against the stone. For one breath, the machines lose their rhythm.'},
+  {tag:'03 · THE FLOOD',lines:[
+    {speaker:'TOVIN',text:'Count between the strokes. That was how we breathed while the water filled the lower ward.'},
+    {speaker:'NOIR',text:'The floodgate was locked from the dry side.'},
+    {speaker:'THE REGENT',text:'I saved the city above it. I have repeated that sentence until it almost sounds true.'}
+  ],after:'The water recedes from a child’s message. It names the hand that closed the gate.'},
+  {tag:'04 · THE ARCHIVES',lines:[
+    {speaker:'ARCHIVIST',text:'Every map was amended. No streets erased; only the people who lived on them.'},
+    {speaker:'NOIR',text:'The order bears Regent Ilyan’s seal. His own daughter is listed as the first offering.'},
+    {speaker:'THE REGENT',text:'Elian was dying with the rest of us. I made a place where the moment before could last.'}
+  ],after:'You fold the missing page. A city can hide a crime only while no one remembers its victims.'},
+  {tag:'05 · THE BELFRY',lines:[
+    {speaker:'ELIAN',text:'Father calls this my voice. I have been asking him to stop for years.'},
+    {speaker:'NOIR',text:'Each toll steals a name. The bell is not warning the city; it is feeding on it.'},
+    {speaker:'THE REGENT',text:'If it falls silent, I hear the moment she died. Do you understand what you ask of me?'}
+  ],after:'The rope burns through your grip. In the pause after the toll, someone says Elian’s name.'},
+  {tag:'06 · THE ORCHARD',lines:[
+    {speaker:'NOIR',text:'White fruit grows from the graves. Every branch bends toward the sound of a name.'},
+    {speaker:'MARA',text:'I followed you to the outer gate. I could not cross. I left my ribbon so you would know home still exists.'},
+    {speaker:'NOIR',text:'I remember her hand. The bell has not taken that from me yet.'}
+  ],after:'You leave the fruit untouched. The ribbon is real, and the way home has a cost.'},
+  {tag:'07 · THE PRISON',lines:[
+    {speaker:'WARDEN',text:'They jailed anyone who remembered the drowned. I held the keys until they took my son.'},
+    {speaker:'NOIR',text:'One cell is open. The others have marks on the inside of their doors.'},
+    {speaker:'WARDEN',text:'Take their testimony. Do not mistake a locked door for an empty room.'}
+  ],after:'The last lock turns. The prisoners are gone, but their account of the flood remains.'},
+  {tag:'08 · THE CHOIR',lines:[
+    {speaker:'THE TEN',text:'We tried to speak together. He called our voices a hymn so no one would listen to the words.'},
+    {speaker:'NOIR',text:'There is a silence after the final name. Even the bell cannot reach it.'},
+    {speaker:'ELIAN',text:'Use that silence. It is the only thing my father did not build.'}
+  ],after:'The voices stop at once. The silence they leave is heavy enough to open a door.'},
+  {tag:'09 · THE ABYSS',lines:[
+    {speaker:'YOUR REFLECTION',text:'You opened the gate once. When you heard Elian trapped inside, you ran. I stayed with the memory.'},
+    {speaker:'NOIR',text:'I thought you were chasing me.'},
+    {speaker:'YOUR REFLECTION',text:'I was waiting for you to be strong enough to come back. The moon above us is the bell’s open mouth.'}
+  ],after:'You take back the memory of your flight. The false moon cracks, and the throne beneath it wakes.'},
+  {tag:'10 · THE THRONE',lines:[
+    {speaker:'THE REGENT',text:'One name will keep the door open. Yours, or theirs. I have spent years choosing for everyone.'},
+    {speaker:'NOIR',text:'You did not preserve your daughter. You made the whole city die around her, one name at a time.'},
+    {speaker:'ELIAN',text:'Say every witness aloud. Let the bell break. Father must live long enough to hear what he did.'},
+    {speaker:'YOUR REFLECTION',text:'There are three ways through. I can only stand beside you for the one you remember.'}
+  ],after:'The Regent lowers his hand. The choice he denied the city is yours.'}
+];
+
 export const ENDINGS = {
-  lantern: {title:'The Little Lantern',tag:'ENDING I · A LIGHT LEFT BEHIND',lines:[
-    'You give the door your name. The city empties quietly, coat by coat, voice by voice.',
-    'Morning reaches the platform. A person waits there, holding an empty scarf.',
-    'At night, a small white light crosses the rails. It always stops beside anyone who is lost.'
+  lantern: {title:'The Last Lantern',tag:'ENDING I · THE GIVEN NAME',lines:[
+    'You give the bell your name. The gates open; the surviving voices pass into a dawn you will never see.',
+    'Mara waits at the threshold with your ribbon. She hears something move beyond the stone, but no voice answers.',
+    'Years later, travellers find a small, steady light in the crypt. It shows the way out. No one knows whose name it burns.'
   ]},
-  home: {title:'Nine Lives, One Shadow',tag:'ENDING II · THE WAY HOME',lines:[
-    'You step through with your name held tightly between your teeth. The door closes behind you.',
-    'A warm hand finds you. The clock has hands again. For a little while, that is enough.',
-    'When you sleep, a city turns on its lights. Your reflection never quite closes its eyes.'
+  home: {title:'The Door for One',tag:'ENDING II · THE KEPT NAME',lines:[
+    'You keep your name and cross alone. Mara lifts you into her arms. For a moment, the bell is too distant to hear.',
+    'The city remains sealed. At night, you hear Tovin count the strokes in your sleep.',
+    'Your reflection stands at the window. It does not accuse you. It waits for someone else to find the door.'
   ]},
-  dawn: {title:'Every Name, Remembered',tag:'ENDING III · THE TRUE DAWN',lines:[
-    'You lay ten small memories on the floor. You say their names. The Operator remembers its own.',
-    'The door no longer needs a sacrifice. Your reflection takes your paw, and the city walks out with you.',
-    'At home, your person opens the window. For the first time, the morning has no shadow waiting behind it.'
+  dawn: {title:'The Silence After',tag:'ENDING III · THE TEN WITNESSES',lines:[
+    'You speak all ten witnesses into the silence. The bell cracks. Elian dies at last, and the Regent remembers every life he spent to delay it.',
+    'The sealed city does not survive. Its people emerge into weather and time; some have no homes left to return to.',
+    'Mara finds you among them. You know her scent but not her name. She sits beside you until morning, and neither of you asks the other to remember first.'
   ]}
 };
 export type EndingKey = keyof typeof ENDINGS;

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InputController } from '../src/input';
+import {joystickAxis} from '../src/touch';
 
 class FakeElement extends EventTarget {
   setPointerCapture() { /* no-op */ }
@@ -24,6 +25,22 @@ describe('InputController', () => {
   });
   afterEach(() => { input.dispose(); vi.unstubAllGlobals(); });
 
+  it('preserves fast strike taps and movement after jump release',()=>{
+    fireKey(fakeWindow,'keydown','KeyJ');fireKey(fakeWindow,'keyup','KeyJ');
+    input.setMove(.63);input.setTouch('jump',true);
+    expect(input.sample()).toMatchObject({move:.63,jump:true,attackPressed:true});
+    input.setTouch('jump',false);expect(input.sample()).toMatchObject({move:.63,jump:false,attackPressed:false});
+    input.setMove(2);expect(input.sample().move).toBe(1);input.reset();expect(input.sample().move).toBe(0);
+  });
+  it('gives the stick a dead zone and full speed before its edge',()=>{
+    expect(joystickAxis(3,42)).toBe(0);expect(joystickAxis(30,42)).toBe(1);expect(joystickAxis(-30,42)).toBe(-1);
+  });
+  it('maps RT strike and seeds held edges across menu resets',()=>{
+    const pad={index:0,connected:true,axes:[0,0],buttons:Array.from({length:16},()=>({pressed:false}))};
+    vi.stubGlobal('navigator',{getGamepads:()=>[pad]});pad.buttons[7].pressed=true;
+    expect(input.sample().attackPressed).toBe(true);input.reset();expect(input.sample().attackPressed).toBe(false);
+    pad.buttons[7].pressed=false;input.sample();pad.buttons[7].pressed=true;expect(input.sample().attackPressed).toBe(true);
+  });
   it('maps keys and emits press edges once', () => {
     fireKey(fakeWindow, 'keydown', 'KeyD');
     fireKey(fakeWindow, 'keydown', 'Space');

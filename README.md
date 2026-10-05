@@ -1,82 +1,77 @@
-# MOONPAW: Chibi Roller
+# MOONPAW: Ashen Vow
 
-**Your reflection left before you.**
+**Ten stolen names. One way to break the bell.**
 
-A monochrome horror platformer by **Adnan Naous**. Guide Noir through ten nights in a city that powers its lights with forgotten names. Run, jump, wall-jump and roll through larger interconnected rooftop routes. Choose who gets to go home.
+A dark 2D pixel platformer by **Adnan Naous**. Guide Noir through the sealed city, recover the witnesses' names, and confront Regent Ilyan. Running, variable-height jumping, wall jumping, rolling and timed strikes share a finite stamina bar. Layered painted scenery, torch pools, fog and particles create depth with planar gameplay.
 
-This is a playable first release, developed from Adnan's original Grok pixel prototype. It is a complete small campaign with ten chapters, three endings, credits, and secrets; more art and balancing can continue from this foundation.
+Version **0.2.0** replaces the first prototype's cute diorama, crowded controls and repeating high-frequency sounds. It is a revised test release. Physical phone/controller testing and human difficulty tuning remain necessary; automated completion proves the routes are possible, not that their challenge is ideal.
 
-![MOONPAW Windows app](docs/screenshots/windows-title.png)
+![Ten thresholds](docs/screenshots/ten-thresholds.png)
 
 ## Play
 
-Windows: download the portable executable from [Releases](https://github.com/AdnanNaous/moonpaw-chibi-roller/releases). Double-click it; Node, a browser, and an internet connection are not needed to play. F11 toggles fullscreen. The first release is unsigned.
+Download the portable Windows executable or Android test APK from [Releases](https://github.com/AdnanNaous/moonpaw-chibi-roller/releases). Windows runs without Node, a browser or internet; F11 toggles fullscreen. Windows is unsigned. Android is a debug-signed test build. The old v0.1 release stays available separately.
 
-Android: download the `Android-test.apk` from [Releases](https://github.com/AdnanNaous/moonpaw-chibi-roller/releases/tag/v0.1.0). This is a debug-signed test build for Android 7.0+, with landscape touch controls. It compiled successfully in GitHub Actions; physical phone and controller testing remains pending.
-
-Web and iOS: the same game builds as an offline installable web app, with a native Capacitor iOS project supplied. Native compilation needs Android SDK 36/JDK 21 or macOS/Xcode respectively.
+The web build is installable and works offline after its first complete load. Capacitor Android and iOS projects are supplied; Android uses SDK 36/JDK 21, and iOS requires macOS/Xcode. No iOS binary has been built here.
 
 | Action | Keyboard / mouse | Standard controller | Touch |
 | --- | --- | --- | --- |
-| Move | A/D or left/right arrows | Left stick / D-pad | Left/right buttons |
+| Move | A/D or arrows | Left stick / D-pad | Floating horizontal pad |
 | Jump | Space, W, up, Z / left mouse | A | Jump |
-| Roll / air dash | Shift, X / right mouse | X or B | Roll |
-| Pause | Escape / P | Start | Pause button |
+| Roll / air dash | Shift, X / right mouse | B or X | Roll |
+| Strike | J | RT or Y | Strike |
+| Pause | Escape / P | Start | HUD pause |
 
-Hold jump for height; release for a short hop. Landing restores your air dash. Jump away from a wall to climb. Flags save your respawn point. Find the door to finish a chapter. Save data stays on this device.
+Touch controls occupy their own strip below the world. Move and jump can be held together. Hold jump for height; release for a short hop. Landing restores the air dash, while stamina limits repeated rolls and strikes. Bells establish respawn points. Recover **both seals** to unlock each exit. The Regent must also be defeated in the last chapter.
 
-## The ten nights
+Progress and journal entries stay on the device. The redesigned campaign uses a separate save slot, preserving the previous prototype's stored data.
 
-1. The Last Platform
-2. Sawdust Chapel
-3. Dead Air District
-4. The Hanging Choir
-5. Velvet Static
-6. Orchard of Teeth
-7. The Bell Foundry
-8. Hospital of Light
-9. The Hollow Moon
-10. The Unwritten Door
+## The ten thresholds
 
-Collect ten hidden memories to reveal the third ending. The title screen has a few secrets of its own.
+1. **Sentence of Stone** — execution gates telegraph their fall.
+2. **Mouth of Iron** — conveyors, hammers and foundry machinery.
+3. **Drowned Procession** — black tides with rise and drain windows.
+4. **Palimpsest** — bridges fade in a repeating sequence.
+5. **The Bell Spine** — raised towers and reversing gusts.
+6. **The Hungry Orchard** — stalkers can be staggered with a strike.
+7. **Arrow Vigil** — high and low volleys warn with aim lines.
+8. **Choir of Knives** — rotating blades demand timed crossings.
+9. **Unlit Below** — darkness and disappearing paths.
+10. **Regent at the Door** — combined hazards and a recovery-window boss fight.
+
+Read discovered testimony in the journal. Ten hidden memories unlock the third of three endings. There are also title and keyboard Easter eggs.
 
 ## Develop
 
-Node.js 22.12+ and pnpm 11 are required. Dependency versions are locked.
+Node.js 22.12+ and pnpm 11 are required. Versions are locked.
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm dev
 pnpm test
+pnpm test:browser
 pnpm build
 pnpm desktop
 pnpm desktop:release
-```
-
-```sh
 pnpm mobile:sync
 pnpm android
 pnpm ios
 ```
 
-The web build goes to `dist/`; Windows output goes to `release/`. The game has no remote asset dependency. `scripts/compose_audio.py` regenerates the original WAV soundtrack and Foley with Python/NumPy; checked-in WAV files are ready to use.
+Builds go to `dist/` and `release/`. `scripts/compose_audio.py` regenerates ten original 40-second sound beds and thirteen short effects with Python/NumPy. WAV files are bundled; there are no runtime remote assets. Sound levels, concurrent voices and repeated cues are capped. Footstep beeps have been removed.
 
-## Project structure
-
-- `src/core.ts`, `src/input.ts`: fixed-step gameplay and input
-- `src/levels.ts`: authored maps and optional routes
-- `src/renderer.ts`: layered 2.5D diorama, original cat and environmental art
-- `src/story.ts`, `src/main.ts`: chapters, endings, UI and credits
-- `src/audio.ts`, `public/audio/`: bundled original soundtrack and effects
+- `src/core.ts`, `src/levels.ts`: fixed-step simulation and authored campaign
+- `src/input.ts`, `src/touch.ts`: keyboard, mouse, controller and multi-touch
+- `src/renderer.ts`: original Canvas 2D pixel artwork and effects
+- `src/story.ts`, `src/main.ts`: narrative, journal, endings and UI
+- `src/audio.ts`, `public/audio/`: original synthesized soundtrack/effects
 - `electron/`, `android/`, `ios/`: application shells
-- `tests/`, `docs/`: verification and design notes
-
-The game uses a side-on camera and planar collisions. Lit depth layers give a 2.5D look; there is no free 3D camera. Graphics tiers cap resolution and adjust shadows/postprocessing. Backgrounding the app pauses gameplay.
+- `tests/`, `docs/`: traversal, input, application checks and design notes
 
 ## Credits & links
 
-Created and directed by **Adnan Naous**. Engineering, procedural art, story and synthesized soundtrack developed with Codex. Original pixel prototype explored with Grok. Technology: Three.js, Electron, Capacitor, Vite and TypeScript.
+Created and directed by **Adnan Naous**. Artwork, story, synthesized soundscapes and engineering developed with Codex. Prototype explored with Grok. Yudho's dirty-pixel approach and Souls atmosphere informed the direction; no artwork or audio was copied from those references.
 
 [Portfolio](https://adnannaous.vercel.app) · [GitHub](https://github.com/AdnanNaous) · [X @vc_351](https://x.com/vc_351) · [LinkedIn](https://www.linkedin.com/in/adnan-naous/) · [All links](https://linktr.ee/VC351)
 
-All visual meshes and audio in this repository were authored for this project; there are no downloaded art/sample packs. Third-party dependencies retain their own licenses. This repository does not currently grant an open-source license to the original game content.
+Original game content is copyright reserved; the repository does not grant an open-source license to it. Dependencies retain their own licenses.

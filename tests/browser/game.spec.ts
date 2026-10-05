@@ -1,39 +1,52 @@
 import {test,expect} from '@playwright/test';
 test.use({hasTouch:true});
-test('story, movement, settings, credits and all three ending screens',async({page})=>{
+test('story, gameplay input, paused journal/settings, credits and ending choices',async({page})=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('/');await page.getByRole('button',{name:'Enter the afterlife ↗'}).click();
-  await expect(page.getByRole('heading',{name:'The Last Platform'})).toBeVisible();
-  await page.getByRole('button',{name:'Skip scene'}).click();
-  await page.keyboard.down('d');await page.waitForTimeout(500);await page.keyboard.up('d');
-  expect(await page.evaluate(()=>(window as any).moonpaw.state.player.x)).toBeGreaterThan(4);
-  await page.keyboard.press('Escape');await page.getByRole('button',{name:'Return to title'}).click();
-  await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByLabel('Graphics').selectOption('balanced');
-  await page.getByRole('button',{name:'← Back'}).click();await page.getByRole('button',{name:'Credits',exact:true}).click();
+  await page.goto('/');await page.getByRole('button',{name:'Enter the crypt',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Sentence of Stone'})).toBeVisible();
+  await page.getByRole('button',{name:'Continue',exact:true}).click();await page.getByRole('button',{name:'Begin now'}).click();
+  await page.keyboard.down('d');await page.waitForTimeout(400);await page.keyboard.up('d');
+  expect(await page.evaluate(()=>(window as any).moonpaw.state.player.x)).toBeGreaterThan(3);
+  await page.keyboard.press('j');await expect.poll(()=>page.evaluate(()=>(window as any).moonpaw.state.player.stamina)).toBeLessThan(85);
+  await page.keyboard.press('Escape');await page.getByRole('button',{name:'Journal',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'The witnesses'})).toBeVisible();await page.getByRole('button',{name:'← Back'}).click();
+  await expect(page.getByRole('heading',{name:'Pause',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByLabel('Effects').selectOption('balanced');
+  await page.getByRole('button',{name:'← Back'}).click();await page.getByRole('button',{name:'Title',exact:true}).click();
+  await page.getByRole('button',{name:'Credits',exact:true}).click();
   await expect(page.getByRole('link',{name:'GitHub ↗'})).toHaveAttribute('href','https://github.com/AdnanNaous');
-  // Test ending UI with a dedicated fixture save; gameplay traversal has separate no-teleport tests.
-  for(const [choice,title] of [['Give the city your name','The Little Lantern'],['Keep your name. Go home.','Nine Lives, One Shadow'],['Remember every name','Every Name, Remembered']]){
-    await page.evaluate((allMemories)=>{
-      const save=(window as any).moonpaw.save;
-      save.unlocked=10;save.best={};save.secrets=allMemories?Array.from({length:10},(_,i)=>`chapter-${i}:memory`):[];
-      localStorage.setItem('moonpaw-progress-v1',JSON.stringify(save));
-    },choice==='Remember every name');
-    await page.reload();await page.getByRole('button',{name:'Continue the story ↗'}).click();await page.getByRole('button',{name:'Skip scene'}).click();
-    await page.evaluate(()=>{const s=(window as any).moonpaw.state;s.player.x=s.stage.exit.x;s.player.y=s.stage.exit.y;});
+  // UI fixtures only. Campaign traversal and boss windows are tested separately.
+  for(const [choice,title] of [['Give your name','The Last Lantern'],['Leave alone','The Door for One'],['Name every witness','The Silence After']]){
+    await page.evaluate(()=>{const save=(window as any).moonpaw.save;Object.assign(save,{unlocked:10,best:{},secrets:Array.from({length:10},(_,i)=>`fixture-${i}`)});localStorage.setItem('moonpaw-progress-v2',JSON.stringify(save));});
+    await page.reload();await page.getByRole('button',{name:'Continue',exact:true}).click();await page.getByRole('button',{name:'Begin now'}).click();
+    await page.evaluate(()=>{const s=(window as any).moonpaw.state;s.relicsCollected=s.relicsRequired;s.bossHealth=0;s.player.x=s.stage.exit.x;s.player.y=s.stage.exit.y;});
     await page.getByRole('button',{name:choice,exact:true}).click();await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();
-    await page.getByRole('button',{name:'The people behind the light →'}).click();await expect(page.getByText('Created & directed by Adnan Naous')).toBeVisible();
+    await page.getByRole('button',{name:'Credits',exact:true}).click();await expect(page.getByText('Created & directed by')).toBeVisible();
   }
   expect(errors).toEqual([]);
 });
-test('mobile landscape touch input and portrait layout',async({page})=>{
-  await page.setViewportSize({width:844,height:390});
-  await page.emulateMedia({reducedMotion:'reduce'});
-  await page.goto('/');await page.getByRole('button',{name:'Enter the afterlife ↗'}).click();await page.getByRole('button',{name:'Skip scene'}).click();
-  await page.getByRole('button',{name:'Move right',exact:true}).hover();await page.mouse.down();
-  await page.waitForTimeout(300);
-  await page.mouse.up();
-  expect(await page.evaluate(()=>(window as any).moonpaw.state.player.x)).toBeGreaterThan(2.5);
-  await page.keyboard.press('Escape');await page.getByRole('button',{name:'Return to title'}).click();
-  await page.setViewportSize({width:390,height:844});await expect(page.getByRole('button',{name:'Enter the afterlife ↗'})).toBeInViewport();
-  await page.screenshot({path:'docs/screenshots/mobile-title.png'});
+test('real multi-touch movement survives jump release; controls stay outside the world',async({page,context})=>{
+  await page.setViewportSize({width:844,height:390});await page.goto('/');
+  await page.getByRole('button',{name:'Enter the crypt'}).click();await page.getByRole('button',{name:'Begin now'}).click();
+  const pad=(await page.getByRole('slider',{name:'Movement'}).boundingBox())!,jump=(await page.getByRole('button',{name:'Jump',exact:true}).boundingBox())!;
+  const scene=(await page.locator('#game').boundingBox())!,dock=(await page.locator('#controls').boundingBox())!;
+  expect(dock.y).toBeGreaterThanOrEqual(scene.y+scene.height);
+  const cdp=await context.newCDPSession(page);
+  const p1={id:1,x:pad.x+pad.width/2,y:pad.y+pad.height/2},p2={id:2,x:jump.x+jump.width/2,y:jump.y+jump.height/2};
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[p1]});p1.x+=40;
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[p1]});await page.waitForTimeout(220);
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[p1,p2]});await page.waitForTimeout(130);
+  expect(await page.evaluate(()=>(window as any).moonpaw.state.player.y)).toBeGreaterThan(.5);
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[p1]});
+  const x=await page.evaluate(()=>(window as any).moonpaw.state.player.x);await page.waitForTimeout(160);
+  expect(await page.evaluate(()=>(window as any).moonpaw.state.player.x)).toBeGreaterThan(x+.5);
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});await page.waitForTimeout(220);
+  expect(await page.getByRole('slider',{name:'Movement'}).getAttribute('aria-valuenow')).toBe('0');
+  expect(Math.abs(await page.evaluate(()=>(window as any).moonpaw.state.player.vx))).toBeLessThan(.2);
+  await page.screenshot({path:'docs/screenshots/mobile-landscape.png'});await page.setViewportSize({width:390,height:844});
+  const portraitCanvas=(await page.locator('#game').boundingBox())!,portraitDock=(await page.locator('#controls').boundingBox())!;
+  expect(portraitDock.y).toBeGreaterThanOrEqual(portraitCanvas.y+portraitCanvas.height);
+  await expect(page.getByRole('button',{name:'Jump',exact:true})).toBeInViewport();await page.screenshot({path:'docs/screenshots/mobile-portrait.png'});
+  await page.keyboard.press('Escape');await page.getByRole('button',{name:'Title',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Enter the crypt'})).toBeInViewport();await page.screenshot({path:'docs/screenshots/mobile-title.png'});
 });
