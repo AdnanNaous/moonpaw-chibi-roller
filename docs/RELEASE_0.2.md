@@ -9,3 +9,5 @@
 - Local Windows portable build completed. Android/iOS assets synchronized. Android binary compilation is performed by GitHub Actions; iOS requires macOS/Xcode.
 
 No physical phone or hardware gamepad performance claim is made. No universal FPS claim is made from desktop screenshots.
+
+All three GitHub Actions jobs passed for source commit 9aa550a (run 37277299247). Android APK contains 23 WAV files and its JS/CSS hashes match the tested production build. The single-file Windows portable wrapper was blocked by this PC's Application Control policy. The unpacked Windows application opened successfully; a ZIP of that exact tested folder is supplied. No security settings were changed.

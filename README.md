@@ -10,7 +10,7 @@ Version **0.2.0** replaces the first prototype's cute diorama, crowded controls 
 
 ## Play
 
-Download the portable Windows executable or Android test APK from [Releases](https://github.com/AdnanNaous/moonpaw-chibi-roller/releases). Windows runs without Node, a browser or internet; F11 toggles fullscreen. Windows is unsigned. Android is a debug-signed test build. The old v0.1 release stays available separately.
+Download the Windows ZIP or Android test APK from [Releases](https://github.com/AdnanNaous/moonpaw-chibi-roller/releases). Extract the whole Windows ZIP and run MOONPAW Ashen Vow.exe inside its folder. It opened successfully on the development PC and runs without Node, a browser or internet; F11 toggles fullscreen. The optional single-file portable wrapper is unsigned and was blocked by Application Control on this PC; no protection settings were changed. Android is a debug-signed test build. The old v0.1 release stays available separately.
 
 The web build is installable and works offline after its first complete load. Capacitor Android and iOS projects are supplied; Android uses SDK 36/JDK 21, and iOS requires macOS/Xcode. No iOS binary has been built here.
 
@@ -58,7 +58,7 @@ pnpm android
 pnpm ios
 ```
 
-Builds go to `dist/` and `release/`. `scripts/compose_audio.py` regenerates ten original 40-second sound beds and thirteen short effects with Python/NumPy. WAV files are bundled; there are no runtime remote assets. Sound levels, concurrent voices and repeated cues are capped. Footstep beeps have been removed.
+Builds go to `dist/` and `release/`. To reproduce the Windows ZIP, run `pnpm desktop:pack`, then `python scripts/package_windows.py`. `scripts/compose_audio.py` regenerates ten original 40-second sound beds and thirteen short effects with Python/NumPy. WAV files are bundled; there are no runtime remote assets. Sound levels, concurrent voices and repeated cues are capped. Footstep beeps have been removed.
 
 - `src/core.ts`, `src/levels.ts`: fixed-step simulation and authored campaign
 - `src/input.ts`, `src/touch.ts`: keyboard, mouse, controller and multi-touch
