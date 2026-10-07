@@ -1,4 +1,5 @@
 interface DesktopWindow {
+  quit():Promise<void>;
   toggleFullscreen():Promise<boolean>;
   isFullscreen():Promise<boolean>;
   onFullscreenChange(callback:(active:boolean)=>void):()=>void;

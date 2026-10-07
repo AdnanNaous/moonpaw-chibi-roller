@@ -1,5 +1,5 @@
 import { createStage, STAGE_INFO } from './levels';
-import type { GameState, InputFrame, Platform, Player, SaveData } from './types';
+import type { Boon, Enemy, GameState, InputFrame, Platform, Player, SaveData } from './types';
 
 const WIDTH = .7;
 const HEIGHT = 1.1;
@@ -7,8 +7,8 @@ const GRAVITY = 27;
 const RUN = 6.6;
 const JUMP = 10.8;
 const DASH = 15;
-const DASH_COST = 62;
-const ATTACK_COST = 34;
+const DASH_COST = 36;
+const ATTACK_COST = 16;
 const COYOTE = .105;
 const BUFFER = .115;
 const emptyInput: InputFrame = { move: 0, jump: false, jumpPressed: false, dashPressed: false, pausePressed: false, confirmPressed: false };
@@ -23,10 +23,12 @@ export class Game {
   private groundedOn = '';
   private crumble = new Map<string, number>();
   private hazardX = new Map<string, number>();
-  private stun = new Map<string, number>();
   private attackCooldown = 0;
-  private bossRecovery = 0;
-  private bossHitCycle = -1;
+  private attackBuffer = 0;
+  private dashCooldown = 0;
+  private staminaDelay = 0;
+  private attackHits = new Set<string>();
+  private boonOffered = false;
 
   constructor(save?: SaveData) {
     // `unlocked` is a count: 1 means only stage zero is available.
@@ -36,12 +38,13 @@ export class Game {
       mode: 'menu', stageIndex: 0, stage, player: this.newPlayer(stage.spawn.x, stage.spawn.y),
       time: 0, deaths: 0, collected: 0, total: stage.pickups.filter(p => !p.secret).length, secrets: this.save.secrets!.length,
       checkpoint: { ...stage.spawn }, event: '', eventId: 0,
-      relicsRequired: stage.pickups.filter(p => p.kind === 'relic').length, relicsCollected: 0, bossHealth: 3, warning: '',
+      relicsRequired: stage.pickups.filter(p => p.kind === 'relic').length, relicsCollected: 0, bossHealth: stage.enemies.find(e => e.kind === 'regent')?.health ?? 0, warning: '',
+      arenaActive: null, kills: 0, boon: null, boonOptions: [],
     };
   }
 
   private newPlayer(x: number, y: number): Player {
-    return { x, y, vx: 0, vy: 0, grounded: false, facing: 1, dashTime: 0, dashReady: true, deadTime: 0, wall: 0, stamina: 100, attackTime: 0 };
+    return { x, y, vx: 0, vy: 0, grounded: false, facing: 1, dashTime: 0, dashReady: true, deadTime: 0, wall: 0, stamina: 100, attackTime: 0, health: 5, maxHealth: 5, invulnerability: 0, dashInvulnerability: 0, combo: 0, comboTime: 0 };
   }
 
   private emit(event: string) { this.state.event = event; this.state.eventId++; }
@@ -54,17 +57,26 @@ export class Game {
       mode: 'playing', stageIndex, stage, player: this.newPlayer(stage.spawn.x, stage.spawn.y),
       time: 0, deaths: 0, collected: 0, total: stage.pickups.filter(p => !p.secret).length, secrets: this.save.secrets!.length,
       checkpoint: { ...stage.spawn }, event: 'start', eventId: this.state.eventId + 1,
-      relicsRequired: stage.pickups.filter(p => p.kind === 'relic').length, relicsCollected: 0, bossHealth: 3, warning: '',
+      relicsRequired: stage.pickups.filter(p => p.kind === 'relic').length, relicsCollected: 0, bossHealth: stage.enemies.find(e => e.kind === 'regent')?.health ?? 0, warning: '',
+      arenaActive: null, kills: 0, boon: null, boonOptions: [],
     };
     this.coyote = 0; this.buffer = 0; this.groundedOn = ''; this.crumble.clear();
     this.hazardX = new Map(stage.hazards.map(h => [h.id, h.x]));
-    this.stun.clear(); this.attackCooldown = 0; this.bossRecovery = 0; this.bossHitCycle = -1;
+    this.attackCooldown = 0; this.attackBuffer = 0; this.dashCooldown = 0; this.staminaDelay = 0; this.attackHits.clear(); this.boonOffered = false;
   }
 
   pause() { if (this.state.mode === 'playing') { this.state.mode = 'paused'; this.emit('pause'); } }
   resume() { if (this.state.mode === 'paused') { this.state.mode = 'playing'; this.emit('resume'); } }
   restart() { this.start(this.state.stageIndex); }
   menu() { this.state.mode = 'menu'; this.emit('menu'); }
+  selectBoon(boon: Boon): boolean {
+    const s = this.state;
+    if (!s.boonOptions.includes(boon)) return false;
+    s.boon = boon; s.boonOptions = [];
+    if (boon === 'ward') { s.player.maxHealth = 7; s.player.health = Math.min(7, s.player.health + 2); }
+    this.emit('boon');
+    return true;
+  }
   next() {
     if (this.state.mode !== 'complete') return;
     if (this.state.stageIndex === STAGE_INFO.length - 1) { this.state.mode = 'ending'; this.emit('ending'); }
@@ -93,9 +105,16 @@ export class Game {
     s.time += dt;
     this.animateWorld(dt);
     if (p.deadTime > 0) { p.deadTime = Math.max(0, p.deadTime - dt); return; }
-    p.stamina = Math.min(100, p.stamina + (p.grounded ? 32 : 14) * dt);
+    p.invulnerability = Math.max(0, p.invulnerability - dt);
+    p.dashInvulnerability = Math.max(0, p.dashInvulnerability - dt);
+    p.comboTime = Math.max(0, p.comboTime - dt);
+    if (!p.comboTime) p.combo = 0;
+    this.staminaDelay = Math.max(0, this.staminaDelay - dt);
+    if (!this.staminaDelay) p.stamina = Math.min(100, p.stamina + (p.grounded ? 34 : 22) * dt);
     p.attackTime = Math.max(0, p.attackTime - dt);
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+    this.dashCooldown = Math.max(0, this.dashCooldown - dt);
+    this.attackBuffer = input.attackPressed ? .13 : Math.max(0, this.attackBuffer - dt);
 
     if (input.jumpPressed) this.buffer = BUFFER;
     else this.buffer = Math.max(0, this.buffer - dt);
@@ -109,33 +128,24 @@ export class Game {
       p.grounded = false; p.wall = 0; this.groundedOn = '';
       this.buffer = 0; this.coyote = 0; this.emit('jump');
     }
-    if (input.dashPressed && p.dashReady && p.stamina >= DASH_COST) {
-      p.dashTime = .19; p.dashReady = false; p.stamina -= DASH_COST;
+    const dashCost = s.boon === 'rush' ? 26 : DASH_COST;
+    if (input.dashPressed && p.dashReady && this.dashCooldown <= 0 && p.stamina >= dashCost) {
+      p.dashTime = .19; p.dashInvulnerability = .16; p.dashReady = false; p.stamina -= dashCost; this.staminaDelay = .48;
+      this.dashCooldown = .36;
       p.vy = Math.max(p.vy, 1.1); this.emit('dash');
     }
-    if (input.attackPressed && this.attackCooldown <= 0 && p.stamina >= ATTACK_COST) {
-      p.stamina -= ATTACK_COST;
-      p.attackTime = .23; this.attackCooldown = .44; this.emit('attack');
-      for (const h of s.stage.hazards) {
-        if (h.kind !== 'hunter' && h.kind !== 'warden') continue;
-        const dx = h.x + h.w / 2 - p.x;
-        if (dx * p.facing < -.2 || dx * p.facing > 1.65 || Math.abs(h.y - p.y) > 1.5) continue;
-        if (h.kind === 'hunter' && (this.stun.get(h.id) ?? 0) <= 0) {
-          this.stun.set(h.id, 1.65); h.active = false; this.emit('stagger');
-        } else if (h.kind === 'warden' && (s.time + (h.phase ?? 0)) % 3.7 >= 2.2 &&
-          this.bossHitCycle !== Math.floor((s.time + (h.phase ?? 0)) / 3.7) &&
-          this.bossRecovery <= 0 && s.bossHealth > 0) {
-          s.bossHealth--; this.bossRecovery = .7; this.emit('boss_hit');
-          this.bossHitCycle = Math.floor((s.time + (h.phase ?? 0)) / 3.7);
-          if (s.bossHealth === 0) { h.active = false; this.emit('boss_defeated'); }
-        }
-      }
+    const attackCost = s.boon === 'ward' ? 20 : ATTACK_COST;
+    if (this.attackBuffer > 0 && this.attackCooldown <= 0 && p.stamina >= attackCost && p.dashTime <= 0) {
+      p.stamina -= attackCost; this.staminaDelay = .38;
+      this.attackBuffer = 0;
+      p.combo = p.comboTime > 0 ? p.combo % 3 + 1 : 1; p.comboTime = .95;
+      p.attackTime = .19; this.attackCooldown = p.combo === 3 ? .4 : .27; this.attackHits.clear(); this.emit('attack');
     }
     if (p.dashTime > 0) {
       p.dashTime = Math.max(0, p.dashTime - dt);
       p.vx = p.facing * DASH;
     } else {
-      const target = move * RUN + (p.grounded ? 0 : s.stage.wind);
+      const target = move * (s.boon === 'rush' ? 7.15 : RUN) + (p.grounded ? 0 : s.stage.wind);
       const accel = p.grounded ? 52 : 34;
       p.vx += clamp(target - p.vx, -accel * dt, accel * dt);
       p.vy -= GRAVITY * dt;
@@ -191,7 +201,13 @@ export class Game {
       }
     }
 
-    if (p.y < -5 || this.hitsHazard()) { this.die(); return; }
+    this.updateCombat(dt);
+    const arena = s.stage.arenas.find(a => a.id === s.arenaActive);
+    if (arena && !arena.cleared) p.x = clamp(p.x, arena.x + WIDTH / 2, arena.x + arena.w - WIDTH / 2);
+    if (p.y < -5) { this.die(); return; }
+    const hazard = this.hitsHazard();
+    if (hazard) this.hurt(hazard.kind === 'spikes' || hazard.kind === 'crusher' ? 2 : 1, hazard.x + hazard.w / 2, false);
+    if (p.deadTime > 0) return;
     for (const gem of s.stage.pickups) {
       if (!gem.collected && Math.abs(gem.x - p.x) < .6 && gem.y > p.y - .2 && gem.y < p.y + HEIGHT + .35) {
         gem.collected = true;
@@ -208,12 +224,13 @@ export class Game {
       if (!bell.active && p.x >= bell.x && p.x <= bell.x + 1.1 && p.y >= bell.y - .1 && p.y <= bell.y + 3.1) {
         for (const other of s.stage.checkpoints) other.active = false;
         bell.active = true; s.checkpoint = { x: bell.x + .55, y: bell.y };
+        p.health = p.maxHealth; p.stamina = 100;
         this.emit('checkpoint');
       }
     }
     if (p.x >= s.stage.exit.x - .4 && Math.abs(p.y - s.stage.exit.y) < 2) {
       if (s.relicsCollected < s.relicsRequired) s.warning = `Find ${s.relicsRequired - s.relicsCollected} remaining seal${s.relicsRequired - s.relicsCollected === 1 ? '' : 's'}`;
-      else if (s.stage.mechanic === 'warden' && s.bossHealth > 0) s.warning = 'The Regent guards the door';
+      else if (s.stage.arenas.some(a => !a.cleared)) s.warning = s.bossHealth > 0 ? 'The Regent guards the door' : 'The hunt is unfinished';
       else this.finish();
     }
   }
@@ -228,7 +245,6 @@ export class Game {
 
   private animateWorld(dt: number) {
     const s = this.state; this.lastDt = dt;
-    this.bossRecovery = Math.max(0, this.bossRecovery - dt);
     s.warning = '';
     if (s.stage.mechanic === 'wind') {
       const gustClock = s.time % 6.4;
@@ -290,27 +306,135 @@ export class Game {
         const t = (s.time + phase) % 4;
         h.telegraph = t < 1 ? t : 0;
         h.active = t >= 1 && t < 2.35;
-      } else if (h.kind === 'hunter') {
-        const remaining = Math.max(0, (this.stun.get(h.id) ?? 0) - dt);
-        this.stun.set(h.id, remaining);
-        h.active = remaining <= 0;
-        h.x = baseX + Math.sin(s.time * 1.25 + phase) * 1.8;
-      } else if (h.kind === 'warden') {
-        const t = (s.time + phase) % 3.7;
-        h.telegraph = t < 1 ? t : 0;
-        h.active = s.bossHealth > 0 && t >= 1 && t < 2.2;
-        h.x = baseX + (t >= 1 && t < 2.2 ? Math.sin((t - 1) / 1.2 * Math.PI) * 2.4 : 0);
-        h.y = baseY;
-        if (s.bossHealth > 0 && s.player.x > baseX - 7) s.warning = t < 1 ? 'Regent winds up' : t < 2.2 ? 'Dodge the charge' : 'Strike during recovery';
+      } else if (h.kind === 'hunter' || h.kind === 'warden') {
+        // Old orbiting hazard actors are replaced by living encounter enemies.
+        h.active = false;
       }
     }
   }
 
   private hitsHazard() {
     const p = this.state.player;
-    return this.state.stage.hazards.some(h => h.active !== false &&
+    return this.state.stage.hazards.find(h => h.active !== false &&
       p.x + WIDTH * .38 > h.x && p.x - WIDTH * .38 < h.x + h.w &&
       p.y + HEIGHT * .87 > h.y && p.y + .12 < h.y + h.h);
+  }
+
+  private updateCombat(dt: number) {
+    const s = this.state, p = s.player;
+    if (!s.arenaActive) {
+      const entering = s.stage.arenas.find(a => !a.cleared && p.x >= a.x && p.x <= a.x + a.w);
+      if (entering) { s.arenaActive = entering.id; this.emit('encounter'); }
+    }
+    const arena = s.stage.arenas.find(a => a.id === s.arenaActive);
+    if (!arena) return;
+    for (const e of s.stage.enemies.filter(e => e.arena === arena.id && e.health > 0)) {
+      e.hitCooldown = Math.max(0, e.hitCooldown - dt);
+      e.timer = Math.max(0, e.timer - dt);
+      e.bossPhase = e.health > e.maxHealth * .66 ? 1 : e.health > e.maxHealth * .33 ? 2 : 3;
+      const dx = p.x - (e.x + e.w / 2);
+      const previousY = e.y;
+      e.vy -= GRAVITY * dt; e.y += e.vy * dt;
+      let landed = false;
+      let standingOn: Platform | undefined;
+      if (e.vy <= 0) {
+        let support: Platform | undefined;
+        for (const q of s.stage.platforms) if (q.active !== false && e.x + e.w > q.x && e.x < q.x + q.w &&
+          previousY >= q.y - .055 && e.y <= q.y && (!support || q.y > support.y)) support = q;
+        if (support) { e.y = support.y; e.vy = 0; landed = true; standingOn = support; }
+      }
+      if (e.phase === 'idle') {
+        e.facing = dx >= 0 ? 1 : -1;
+        const range = e.kind === 'marksman' ? 9 : e.kind === 'regent' ? 4.4 : e.kind === 'skirmisher' ? 3.2 : 2.1;
+        e.dropTimer = Math.max(0, (e.dropTimer ?? 0) - dt);
+        if (landed && standingOn && standingOn.h < 1 && p.y < e.y - .8) {
+          e.dropDirection = e.x + e.w / 2 - standingOn.x < standingOn.x + standingOn.w - e.x - e.w / 2 ? -1 : 1;
+          e.dropTimer = .45;
+        }
+        if ((e.dropTimer ?? 0) > 0) e.x = clamp(e.x + (e.dropDirection ?? 1) * 3.8 * dt, arena.x + .4, arena.x + arena.w - e.w - .4);
+        else if (Math.abs(dx) > range - .25 && e.kind !== 'marksman') {
+          const speed = e.kind === 'skirmisher' ? 3.5 : e.kind === 'regent' ? 2.5 : 2.3;
+          e.x = clamp(e.x + e.facing * speed * dt, arena.x + .4, arena.x + arena.w - e.w - .4);
+        }
+        if (landed && p.y > e.y + .8 && Math.abs(dx) < 4.5 && e.kind !== 'marksman') e.vy = 10.5;
+        if (!e.timer && Math.abs(dx) < range && (e.kind === 'marksman' || Math.abs(p.y - e.y) < 1.25)) this.prepareAttack(e);
+      } else if (e.phase === 'windup') {
+        const duration = this.windupDuration(e);
+        e.telegraph = clamp(1 - e.timer / duration, .05, 1);
+        if (!e.timer) {
+          e.phase = 'attack'; e.telegraph = 1;
+          e.timer = e.attackKind === 'lunge' ? .24 : e.attackKind === 'shot' ? .15 : .18;
+          this.emit(e.kind === 'regent' ? 'boss_attack' : 'enemy_attack');
+        }
+      } else if (e.phase === 'attack' && !e.timer) {
+        e.phase = 'recovery'; e.telegraph = 0;
+        e.timer = e.kind === 'regent' ? (e.bossPhase === 3 ? .64 : .86) : e.kind === 'skirmisher' ? .48 : .75;
+      } else if ((e.phase === 'recovery' || e.phase === 'stagger') && !e.timer) {
+        e.phase = 'idle'; e.timer = e.kind === 'regent' ? .18 : .24;
+      }
+      // Each committed player swing can hit an enemy only once. Facing and height matter.
+      if (p.attackTime > .035 && !this.attackHits.has(e.id) && e.hitCooldown <= 0) {
+        const forward = (e.x + e.w / 2 - p.x) * p.facing;
+        if (forward > -.3 && forward < 1.8 && p.y < e.y + e.h && p.y + HEIGHT > e.y + .15) {
+          this.attackHits.add(e.id);
+          const guarded = e.kind === 'regent' && e.phase !== 'recovery' && e.phase !== 'stagger';
+          if (guarded) this.emit('guard');
+          else {
+            const damage = s.boon === 'fang' && p.combo === 3 ? 2 : 1;
+            e.health = Math.max(0, e.health - damage); e.hitCooldown = .2;
+            this.emit(e.kind === 'regent' ? 'boss_hit' : 'enemy_hit');
+            if (!e.health) {
+              e.phase = 'dead'; e.telegraph = 0; s.kills++; p.stamina = Math.min(100, p.stamina + 12);
+              this.emit(e.kind === 'regent' ? 'boss_defeated' : 'enemy_defeated');
+            } else if (p.combo === 3 && e.kind !== 'regent') {
+              e.phase = 'stagger'; e.timer = .34; e.telegraph = 0; this.emit('stagger');
+            }
+          }
+        }
+      }
+      if (e.health > 0 && e.phase === 'attack' && p.x + WIDTH * .4 > e.attackX && p.x - WIDTH * .4 < e.attackX + e.attackW &&
+        p.y + HEIGHT * .9 > e.attackY && p.y + .12 < e.attackY + e.attackH) {
+        this.hurt(e.kind === 'regent' && e.attackKind === 'slam' ? 2 : 1, e.x + e.w / 2, true);
+        if (p.deadTime > 0) return;
+      }
+      if (e.kind === 'regent') s.bossHealth = e.health;
+    }
+    if (arena.enemyIds.every(id => s.stage.enemies.find(e => e.id === id)!.health <= 0)) {
+      arena.cleared = true; s.arenaActive = null;
+      if (!this.boonOffered) { this.boonOffered = true; s.boonOptions = ['fang', 'ward', 'rush']; }
+      this.emit('arena_cleared');
+    } else if (s.bossHealth > 0 && s.stage.enemies.some(e => e.arena === arena.id && e.kind === 'regent')) {
+      const boss = s.stage.enemies.find(e => e.kind === 'regent')!;
+      s.warning = boss.phase === 'recovery' ? 'Regent exposed — strike' : boss.phase === 'windup' ? `${boss.attackKind.toUpperCase()} — read the amber tell` : `Regent · phase ${boss.bossPhase}`;
+    } else s.warning = 'Hunt sealed · clear the sentries';
+  }
+
+  private windupDuration(e: Enemy) {
+    return e.kind === 'regent' ? (e.attackKind === 'slam' ? .85 : e.bossPhase === 3 ? .48 : .65) :
+      e.kind === 'marksman' ? .8 : e.kind === 'skirmisher' ? .6 : .72;
+  }
+
+  private prepareAttack(e: Enemy) {
+    const p = this.state.player;
+    e.attackCount++;
+    e.attackKind = e.kind === 'marksman' ? 'shot' : e.kind === 'skirmisher' ? 'lunge' : e.kind === 'regent' ?
+      (e.bossPhase >= 2 && e.attackCount % 3 === 0 ? 'slam' : e.attackCount % 2 ? 'slash' : 'lunge') : 'slash';
+    e.facing = p.x >= e.x + e.w / 2 ? 1 : -1;
+    e.phase = 'windup'; e.timer = this.windupDuration(e); e.telegraph = .05;
+    e.attackW = e.attackKind === 'shot' ? Math.max(2, Math.abs(p.x - e.x) + 1.1) : e.attackKind === 'slam' ? 5.5 : e.attackKind === 'lunge' ? 3.65 : 2.35;
+    e.attackH = e.attackKind === 'shot' ? .36 : e.attackKind === 'slam' ? .6 : 1.45;
+    e.attackX = e.attackKind === 'slam' ? e.x + e.w / 2 - e.attackW / 2 : e.facing > 0 ? e.x + e.w / 2 : e.x + e.w / 2 - e.attackW;
+    e.attackY = e.attackKind === 'shot' ? p.y + .46 : e.y;
+  }
+
+  private hurt(damage: number, origin: number, combat: boolean) {
+    const p = this.state.player;
+    if (p.invulnerability > 0 || (combat && p.dashInvulnerability > 0)) return;
+    p.health = Math.max(0, p.health - damage);
+    if (!p.health) { this.die(); return; }
+    p.invulnerability = .78;
+    p.vx = p.x >= origin ? 6 : -6; p.vy = Math.max(p.vy, 3.8); p.dashTime = 0;
+    this.emit('hurt');
   }
 
   private die() {
@@ -318,7 +442,17 @@ export class Game {
     s.deaths++; this.emit('death');
     p.x = s.checkpoint.x; p.y = s.checkpoint.y;
     p.vx = 0; p.vy = 0; p.grounded = false; p.wall = 0; p.dashTime = 0; p.dashReady = true; p.stamina = 100; p.attackTime = 0;
-    p.deadTime = .46; this.coyote = 0; this.buffer = 0; this.groundedOn = '';
+    p.deadTime = .46; this.coyote = 0; this.buffer = 0; this.groundedOn = ''; this.attackBuffer = 0; this.dashCooldown = 0;
+    p.health = p.maxHealth; p.invulnerability = .8; p.dashInvulnerability = 0; p.combo = 0; p.comboTime = 0;
+    s.arenaActive = null;
+    for (const arena of s.stage.arenas) {
+      if (arena.x + arena.w < s.checkpoint.x) continue;
+      arena.cleared = false;
+      for (const e of s.stage.enemies.filter(e => e.arena === arena.id)) {
+        e.health = e.maxHealth; e.phase = 'idle'; e.timer = .6; e.x = e.spawnX; e.y = e.spawnY; e.vy = 0; e.telegraph = 0; e.hitCooldown = 0; e.attackCount = 0;
+        if (e.kind === 'regent') s.bossHealth = e.health;
+      }
+    }
   }
 
   private finish() {

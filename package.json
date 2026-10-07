@@ -1,6 +1,6 @@
 {
   "name": "moonpaw-chibi-roller",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "description": "A dark pixel horror pilgrimage through ten dangerous thresholds.",
   "author": "Adnan Naous",
@@ -22,6 +22,7 @@
     "test:app": "node scripts/app-smoke.cjs"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.5.2",
     "three": "^0.186.1"
   },

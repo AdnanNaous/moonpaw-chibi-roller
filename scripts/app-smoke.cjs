@@ -1,10 +1,13 @@
 const { _electron, expect } = require('@playwright/test');
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const os = require('node:os');
 (async()=>{
   const root=path.resolve(__dirname,'..');
   const packaged=process.env.MOONPAW_EXECUTABLE;
-  const application=await _electron.launch({executablePath:packaged||path.join(root,'node_modules/electron/dist/electron.exe'),args:packaged?[]:['.'],cwd:root,env:{...process.env,MOONPAW_TEST:'1'}});
+  const profile=await fs.mkdtemp(path.join(os.tmpdir(),'moonpaw-smoke-'));
+  const application=await _electron.launch({executablePath:packaged||path.join(root,'node_modules/electron/dist/electron.exe'),args:packaged?[]:['.'],cwd:root,env:{...process.env,MOONPAW_TEST:'1',MOONPAW_TEST_PROFILE:profile}});
+  let exited=false;
   try{
     const page=await application.firstWindow();const errors=[];page.on('pageerror',e=>errors.push(e.message));
     await application.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows()[0];w.show();w.focus();});
@@ -31,9 +34,17 @@ const fs = require('node:fs/promises');
     await page.getByRole('button',{name:'← Back'}).click();
     await fs.mkdir(path.join(root,'docs/screenshots'),{recursive:true});
     await page.screenshot({path:path.join(root,'docs/screenshots/windows-title.png')});
-    const report={platform:packaged?'Windows packaged executable':'Windows Electron development shell',checks:['custom protocol','title','fullscreen button and F11 exit','story advance/skip','keyboard movement','jump','pause','credits links'],moved,airborne,errors};
-    await fs.writeFile(path.join(root,'docs/app-smoke.json'),JSON.stringify(report,null,2));
+    await page.getByRole('button',{name:'Settings',exact:true}).click();await expect(page.getByLabel('Music',{exact:true})).toBeVisible();
+    await page.screenshot({path:path.join(root,'docs/screenshots/settings-desktop.png')});
+    await page.getByRole('button',{name:'Exit game',exact:true}).click();await expect(page.getByRole('heading',{name:'Exit game?'})).toBeVisible();
+    await page.screenshot({path:path.join(root,'docs/screenshots/exit-dialog.png')});
+    await page.getByRole('button',{name:'Stay',exact:true}).click();await expect(page.getByRole('heading',{name:'Settings',exact:true})).toBeVisible();
+    const report={platform:packaged?'Windows packaged executable':'Windows Electron development shell',checks:['custom protocol','title','fullscreen button and F11 exit','story advance/skip','keyboard movement','jump','pause','credits links','separate audio settings','exit dialog cancellation','native quit'],moved,airborne,errors};
     if(errors.length)throw new Error(errors.join('\n'));
+    await page.getByRole('button',{name:'Exit game',exact:true}).click();
+    const closed=application.waitForEvent('close');await page.getByRole('button',{name:'Exit game',exact:true}).click();await closed;
+    exited=true;
+    await fs.writeFile(path.join(root,'docs/app-smoke.json'),JSON.stringify(report,null,2));
     console.log(JSON.stringify(report));
-  }finally{await application.close();}
+  }finally{if(!exited)await application.close();}
 })().catch(e=>{console.error(e);process.exit(1);});

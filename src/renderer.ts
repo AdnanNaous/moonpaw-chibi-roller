@@ -1,4 +1,5 @@
-import {createPilgrimSprites} from './pixel-art';
+import {createPilgrimSprites, createEnemySprites} from './pixel-art';
+import {createMaterial, brokenOrbit, paintMoth, architectureDetail} from './world-art';
 import type { GameState, Quality, Stage } from './types';
 
 type G = CanvasRenderingContext2D;
@@ -32,13 +33,9 @@ function line(c: G, x1: number, y1: number, x2: number, y2: number, color: strin
   c.strokeStyle = color; c.lineWidth = width; c.beginPath(); c.moveTo(px(x1) + .5, px(y1) + .5); c.lineTo(px(x2) + .5, px(y2) + .5); c.stroke();
 }
 function arch(c: G, x: number, foot: number, w: number, h: number, color: string) {
-  c.fillStyle = color;
-  c.fillRect(px(x - w / 2), px(foot - h * .55), px(w), px(h * .55));
-  polygon(c, [x - w / 2, foot - h * .55, x, foot - h, x + w / 2, foot - h * .55], color);
-}
-function cross(c: G, x: number, foot: number, s: number, color: string) {
-  c.fillStyle = color; c.fillRect(px(x - s * .1), px(foot - s), px(s * .2), px(s));
-  c.fillRect(px(x - s * .36), px(foot - s * .72), px(s * .72), px(s * .13));
+  c.fillStyle=color;const radius=Math.max(2,Math.round(w/2)),top=Math.round(foot-h),shoulder=top+radius;
+  c.fillRect(Math.round(x-radius),shoulder,radius*2,Math.max(0,Math.round(h)-radius));
+  for(let row=0;row<radius;row++){const half=Math.floor(Math.sqrt(radius*radius-(radius-row)*(radius-row)));c.fillRect(Math.round(x-half),top+row,half*2,1);}
 }
 function ring(c: G, x: number, y: number, r: number, color: string, width = 2) {
   c.strokeStyle = color; c.lineWidth = width; c.beginPath(); c.arc(px(x), px(y), Math.max(1, px(r)), 0, Math.PI * 2); c.stroke();
@@ -49,6 +46,11 @@ export class GameRenderer {
   readonly stats = { fps: 0, drawCalls: 0, triangles: 0, pixelScale:1, width:0, height:0 };
   private readonly canvas: HTMLCanvasElement;
   private readonly sprites=createPilgrimSprites();
+  private readonly enemySprites=createEnemySprites();
+  private material?:CanvasPattern;
+  private foreground?:HTMLCanvasElement;
+  private readonly atlas=new Image();
+  private backplate?:HTMLCanvasElement;
   private pixelScale=1;
   private readonly screen: G;
   private readonly scene: HTMLCanvasElement;
@@ -66,6 +68,7 @@ export class GameRenderer {
   private camY = 2.6;
   private layers: Layer[] = [];
   private reduced = false;
+  private userReduced = false;
   private media?: MediaQueryList;
   private onMotion?: (e: MediaQueryListEvent) => void;
   private fpsT = 0;
@@ -82,10 +85,12 @@ export class GameRenderer {
     if (!context) throw new Error('Offscreen Canvas 2D is unavailable');
     this.c = context;
     this.noise = this.makeNoise();
+    this.atlas.onload=()=>this.buildBackplate();
+    this.atlas.src=`${import.meta.env.BASE_URL}art/threshold-environments-v3.png`;
     if (typeof matchMedia === 'function') {
       this.media = matchMedia('(prefers-reduced-motion: reduce)');
       this.reduced = this.media.matches;
-      this.onMotion = e => { this.reduced = e.matches; };
+      this.onMotion = e => { this.reduced = e.matches || this.userReduced; };
       this.media.addEventListener?.('change', this.onMotion);
     }
     this.resize();
@@ -119,18 +124,19 @@ export class GameRenderer {
     // CSS owns the play viewport, including the separate mobile control strip.
     this.canvas.width = cw; this.canvas.height = ch;
     this.screen.imageSmoothingEnabled = false;
-    const logicalHeight = this.quality === 'low' ? 144 : 180;
+    const logicalHeight = this.quality === 'low' ? 180 : this.quality === 'high' ? 320 : 270;
     this.pixelScale=Math.max(2,Math.round(ch/logicalHeight));
     this.height=Math.max(1,Math.floor(ch/this.pixelScale));
     this.width=Math.max(1,Math.floor(cw/this.pixelScale));
     this.scene.width = this.width; this.scene.height = this.height;
     this.c.imageSmoothingEnabled = false;
-    this.unit = this.height / (cw / ch < .85 ? 9.5 : 8.0);
+    this.unit = this.height / (cw / ch < .85 ? 9.0 : 7.5);
     this.stats.pixelScale=this.pixelScale;this.stats.width=this.width;this.stats.height=this.height;
     this.buildLayers();
   }
 
   setQuality(quality: Quality) { this.quality = quality; this.resize(); }
+  setReducedMotion(value:boolean) { this.userReduced=value;this.reduced=value||Boolean(this.media?.matches); }
 
   private X(x: number) { return px(this.width * .5 + (x - this.camX) * this.unit); }
   private Y(y: number) { return px(this.height * .5 - (y - this.camY) * this.unit); }
@@ -139,7 +145,7 @@ export class GameRenderer {
     if (!this.stage) return;
     const layers: Layer[] = [];
     const tileW = Math.max(512, px(this.unit * 25));
-    const specs = [{ speed: .10, opacity: .8 }, { speed: .30, opacity: .93 }, { speed: .53, opacity: .85 }];
+    const specs = [{ speed: .08, opacity: .50 }, { speed: .25, opacity: .72 }, { speed: .50, opacity: .87 }];
     for (let depth = 0; depth < 3; depth++) {
       const tile = document.createElement('canvas'); tile.width = tileW; tile.height = this.height;
       const c = tile.getContext('2d'); if (!c) continue;
@@ -148,6 +154,9 @@ export class GameRenderer {
       layers.push({ canvas: tile, ...specs[depth] });
     }
     this.layers = layers;
+    this.material=this.c.createPattern(createMaterial(this.theme,this.tone.stone,this.tone.edge),'repeat')??undefined;
+    this.buildForeground(tileW);
+    this.buildBackplate();
   }
 
   private paintBackdropTile(c: G, w: number, h: number, depth: number) {
@@ -155,14 +164,20 @@ export class GameRenderer {
     const base = depth === 0 ? t.far : depth === 1 ? t.mid : t.near;
     const floor = h * (depth === 0 ? .82 : depth === 1 ? .90 : 1.02);
     const scale = depth === 0 ? .62 : depth === 1 ? .92 : 1.1;
-    const cell = w / 7;
-    for (let i = -1; i < 8; i++) {
+    const cells=depth===0?5:depth===1?4:7;
+    const cell = w / cells;
+    for (let i = -1; i < cells+1; i++) {
       const x = i * cell + hash(i * 91 + depth * 31) * cell * .18;
-      const tall = (60 + hash(i * 17 + depth * 43) * 110) * scale * h/400;
+      const tall = (130 + hash(i * 17 + depth * 43) * 130) * scale * h/320;
       const width = cell * (.76 + hash(i * 14 + depth) * .48);
       if (depth === 0) this.drawFar(c, theme, x, floor, width, tall, i, base);
       else if (depth === 1) this.drawMiddle(c, theme, x, floor, width, tall, i, base);
       else this.drawNear(c, theme, x, floor, width, tall, i, base);
+      if(depth===1&&theme!=='orchard'&&theme!=='abyss'){
+        polygon(c,[x+width*.93,floor-tall*.82,x+width*1.08,floor-tall*.91,x+width*1.08,floor,x+width*.93,floor],'#080f16');
+        line(c,x+width*.94,floor-tall*.80,x+width*.94,floor,'#65756c',1);
+        line(c,x+width*.04,floor-tall*.89,x+width*.89,floor-tall*.89,'#8e9480',1);
+      }
     }
     if (depth === 2) {
       c.fillStyle = base; c.fillRect(0, px(floor - 3), w, h - floor + 4);
@@ -180,111 +195,135 @@ export class GameRenderer {
     c.restore();
   }
 
-  private drawFar(c: G, theme: string, x: number, floor: number, w: number, h: number, i: number, color: string) {
-    c.fillStyle = color;
-    switch (theme) {
-      case 'crypt': case 'choir': case 'throne': case 'archives':
-        arch(c, x + w * .5, floor, w * .77, h, color);
-        c.fillRect(px(x + w * .45), px(floor - h * 1.24), px(w * .1), px(h * .30));
-        polygon(c, [x + w * .4, floor - h * 1.2, x + w * .5, floor - h * 1.48, x + w * .6, floor - h * 1.2], color);
-        if (i % 2 === 0) { arch(c, x + w * .1, floor, w * .22, h * .72, color); arch(c, x + w * .9, floor, w * .22, h * .72, color); }
-        break;
-      case 'foundry': case 'prison':
-        c.fillRect(px(x), px(floor - h * .64), px(w), px(h * .64));
-        c.fillRect(px(x + w * .16), px(floor - h * 1.32), px(w * .21), px(h * .71));
-        c.fillRect(px(x + w * .66), px(floor - h * 1.07), px(w * .13), px(h * .47));
-        break;
-      case 'flood': case 'belfry':
-        arch(c, x + w * .5, floor, w * .48, h * 1.34, color);
-        c.fillRect(px(x - w * .07), px(floor - h * .42), px(w * 1.14), px(h * .42));
-        break;
-      case 'orchard':
-        this.tree(c, x + w * .5, floor, h * 1.25, color, i); break;
-      case 'abyss':
-        polygon(c, [x, floor - h * .2, x + w * .18, floor - h * 1.25, x + w * .6, floor - h * .68, x + w * .9, floor - h * 1.6, x + w, floor], color); break;
-      default: arch(c, x + w * .5, floor, w * .7, h, color);
+  private buildForeground(w:number){
+    const tile=document.createElement('canvas');tile.width=w;tile.height=this.height;
+    const c=tile.getContext('2d')!,h=this.height; c.imageSmoothingEnabled=false;
+    const organic=this.theme==='orchard'||this.theme==='abyss';
+    // Close planes frame the ceiling and the ground. Never hide the central combat lane.
+    if(organic){
+      for(let i=0;i<12;i++){
+        const x=hash(i*67)*w;
+        line(c,x,0,x+6,h*(.10+hash(i*37)*.12),'#060d11',3);
+        for(let k=0;k<4;k++){const y=k*h*.037;polygon(c,[x,y,x-7,y+3,x-4,y+8,x,y+6],'#111e22');}
+      }
+    }else{
+      c.fillStyle='#030a0e';c.fillRect(0,0,w,5);
+      for(let i=0;i<5;i++){
+        const x=i*w/5+19,len=h*(.09+hash(i*41)*.13);
+        for(let y=3;y<len;y+=4){c.fillStyle=y%8?'#26383b':'#071117';c.fillRect(px(x),px(y),2,3);}
+        if(i%2){c.fillStyle='#101d22';c.fillRect(px(x-5),px(len),12,6);c.fillStyle='#647665';c.fillRect(px(x-2),px(len+3),3,1);}
+      }
+      // Broken, sloping corners imply an interior volume without a flat full-screen frame.
+      polygon(c,[0,0,36,0,19,h*.13,9,h*.36,0,h*.42],'#050d12');
+      line(c,19,h*.13,9,h*.35,'#263e40',2);
+      c.fillStyle='#182c31';c.fillRect(3,4,4,Math.round(h*.24));
+      for(let yy=9;yy<h*.25;yy+=11){c.fillStyle='#41524a';c.fillRect(3,yy,2,2);}
+      polygon(c,[w,0,w-23,0,w-12,h*.10,w,h*.18],'#071016');
     }
-    if (theme === 'crypt' || theme === 'archives' || theme === 'choir' || theme === 'throne') {
-      // Recessed lancets and exposed ribs break the flat roof silhouette.
-      for (let n = 0; n < 3; n++) {
-        const wx = x + w * (.25 + n * .25), wy = floor - h * (.39 + (n % 2) * .10);
-        arch(c, wx, wy + h * .12, w * .09, h * .23, '#080b0c');
-        line(c, wx, wy - h * .06, wx, wy + h * .10, '#545856', 1);
-      }
-      line(c, x + w * .16, floor - h * .25, x + w * .30, floor - h * .64, '#454c49');
-      line(c, x + w * .84, floor - h * .25, x + w * .70, floor - h * .64, '#454c49');
-      if (theme === 'crypt') { cross(c, x + w * .5, floor - h * 1.30, 12, '#656b64'); }
-      if (theme === 'archives') for (let n = 0; n < 6; n++) line(c, x + w * .2, floor - h * (.16 + n * .075), x + w * .8, floor - h * (.16 + n * .075), '#555750');
-      if (theme === 'choir') ring(c, x + w * .5, floor - h * .82, w * .09, '#656268');
-      if (theme === 'throne') {
-        polygon(c, [x + w * .16, floor - h * .73, x + w * .28, floor - h * 1.12, x + w * .35, floor - h * .73], '#242024');
-        polygon(c, [x + w * .65, floor - h * .73, x + w * .72, floor - h * 1.12, x + w * .84, floor - h * .73], '#242024');
-      }
-    } else if (theme === 'foundry' || theme === 'prison') {
-      for (let n = 0; n < 3; n++) {
-        const wx = x + w * (.2 + n * .28);
-        c.fillStyle = '#0b0e0e'; c.fillRect(px(wx), px(floor - h * .52), px(w * .09), px(h * .20));
-        line(c, wx + w * .045, floor - h * .52, wx + w * .045, floor - h * .32, '#59605b');
-      }
-      if (theme === 'foundry') {
-        line(c, x - 2, floor - h * .60, x + w + 2, floor - h * .60, '#5e5b51', 2);
-        c.fillStyle = '#b16e43'; c.fillRect(px(x + w * .42), px(floor - h * .14), px(w * .15), 2);
-      } else for (let n = 0; n < 5; n++) line(c, x + n * w / 4, floor - h * .75, x + n * w / 4, floor - h * .12, '#0d1112', 2);
-    } else if (theme === 'flood' || theme === 'belfry') {
-      ring(c, x + w * .5, floor - h * .77, w * .10, '#101619', 2);
-      line(c, x + w * .20, floor - h * .21, x + w * .85, floor - h * .22, '#6c7776');
-      if (theme === 'flood') for (let n = 0; n < 3; n++) line(c, x + w * .18, floor - h * (.08 + n * .09), x + w * .86, floor - h * (.08 + n * .09), '#4e6769');
-      else { c.fillStyle = '#908778'; c.fillRect(px(x + w * .47), px(floor - h * .77), px(w * .06), px(h * .12)); }
+    for(let i=0;i<w/14;i++){
+      const x=i*14,r=4+hash(i*61)*9,y=h-2;
+      polygon(c,[x-5,y,x-1,y-r,x+5,y-r*.55,x+11,y],'#050d12');
+      line(c,x-1,y-r,x+4,y-r*.65,'#2c4140');
+      if(organic){line(c,x,y,x-3,y-r-3,'#10282a',2);c.fillStyle='#384b41';c.fillRect(px(x-6),px(y-r-2),4,1);}
     }
+    this.foreground=tile;
   }
 
-  private drawMiddle(c: G, theme: string, x: number, floor: number, w: number, h: number, i: number, color: string) {
-    c.fillStyle = color;
-    const edge = this.tone.edge;
-    if (theme === 'orchard') { this.tree(c, x + w * .5, floor, h * 1.35, color, i + 32); return; }
-    if (theme === 'abyss') {
-      polygon(c, [x, floor, x + w * .19, floor - h * .55, x + w * .41, floor - h * 1.2, x + w * .68, floor - h * .58, x + w, floor], color);
-      for (let n = 0; n < 5; n++) line(c, x + n * w * .19, floor - h * .25, x + n * w * .19 + 10, floor - h * .65, '#657579', 1);
-      return;
+  private buildBackplate(){
+    if(!this.atlas.complete||!this.atlas.naturalWidth)return;
+    const index=Math.max(0,SCENES.indexOf(this.theme as typeof SCENES[number]));
+    const sw=this.atlas.naturalWidth/2,sh=this.atlas.naturalHeight/5;
+    const h=this.height,w=Math.round(h*sw/sh);
+    const tile=document.createElement('canvas');tile.width=w*2;tile.height=h;
+    const c=tile.getContext('2d')!;c.imageSmoothingEnabled=false;
+    c.drawImage(this.atlas,(index%2)*sw,Math.floor(index/2)*sh,sw,sh,0,0,w,h);
+    // Mirrored continuations remove a hard atlas boundary during long traversal.
+    c.save();c.translate(w*2,0);c.scale(-1,1);c.drawImage(tile,0,0,w,h,0,0,w,h);c.restore();
+    this.backplate=tile;
+  }
+
+  private drawBackplate(){
+    const tile=this.backplate;if(!tile)return false;
+    const offset=((this.camX*this.unit*.13)%tile.width+tile.width)%tile.width;
+    this.c.save();this.c.globalAlpha=.87;
+    for(let x=-offset;x<this.width;x+=tile.width)this.c.drawImage(tile,px(x),0);
+    this.c.restore();
+    // A dark near-plane keeps original luminous art behind actor/hazard contrast.
+    const fade=this.c.createLinearGradient(0,this.height*.40,0,this.height);
+    fade.addColorStop(0,'#050d1000');fade.addColorStop(.65,'#050d1050');fade.addColorStop(1,'#050d109e');
+    this.c.fillStyle=fade;this.c.fillRect(0,0,this.width,this.height);return true;
+  }
+
+  private drawForeground(){
+    const tile=this.foreground;if(!tile)return;
+    const offset=((this.camX*this.unit*1.24)%tile.width+tile.width)%tile.width;
+    for(let x=-offset;x<this.width;x+=tile.width)this.c.drawImage(tile,px(x),0);
+  }
+
+  private drawFar(c:G,theme:string,x:number,floor:number,w:number,h:number,i:number,color:string){
+    c.fillStyle=color;
+    if(theme==='orchard'){this.tree(c,x+w*.5,floor,h*1.35,color,i);return;}
+    if(theme==='abyss'){polygon(c,[x,floor,x+w*.18,floor-h*.6,x+w*.4,floor-h*1.6,x+w*.54,floor-h*.65,x+w*.8,floor-h*1.15,x+w,floor],color);return;}
+    if(theme==='crypt'||theme==='throne'){
+      // Cliff-cut ossuary and civic terraces. No steeples or religious facades.
+      c.fillRect(px(x),px(floor-h*.8),px(w),px(h*.8));
+      c.fillRect(px(x+w*.16),px(floor-h),px(w*.72),px(h*.25));
+      for(let k=0;k<4;k++){c.fillStyle='#10171a';c.fillRect(px(x+w*(.13+k*.22)),px(floor-h*.7),px(w*.12),px(h*.29));}
+      brokenOrbit(c,x+w*.5,floor-h*.92,Math.max(3,w*.085),'#67716c');
+    }else if(theme==='foundry'||theme==='prison'){
+      c.fillRect(px(x),px(floor-h*.65),px(w),px(h*.65));
+      for(let k=0;k<3;k++)c.fillRect(px(x+w*(.12+k*.28)),px(floor-h*(.9+k*.11)),px(w*.12),px(h*.6));
+      for(let k=0;k<3;k++){c.fillStyle='#69726c';c.fillRect(px(x+w*(.15+k*.28)),px(floor-h*.82),1,px(h*.68));}
+    }else if(theme==='belfry'){
+      c.fillRect(px(x+w*.29),px(floor-h*1.2),px(w*.43),px(h*1.2));
+      for(let k=0;k<5;k++){c.fillStyle=color;c.fillRect(px(x+w*.18),px(floor-h*(.2+k*.21)),px(w*.68),3);}
+      ring(c,x+w*.5,floor-h*.91,w*.13,'#475657',2);
+    }else if(theme==='choir'){
+      // A resonator field: enormous round drums, separated by masonry ducts.
+      c.fillRect(px(x),px(floor-h*.5),px(w),px(h*.5));
+      ring(c,x+w*.45,floor-h*.58,w*.31,color,Math.max(5,w*.15));
+      ring(c,x+w*.45,floor-h*.58,w*.20,'#0a1013',3);
+    }else if(theme==='flood'){
+      c.fillRect(px(x),px(floor-h*.67),px(w),px(h*.67));
+      for(let k=0;k<3;k++)arch(c,x+w*(.17+k*.34),floor-h*.15,w*.18,h*.42,'#091518');
+      c.fillStyle='#718581';c.fillRect(px(x),px(floor-h*.7),px(w),2);
+    }else{
+      c.fillRect(px(x),px(floor-h*.83),px(w),px(h*.83));
+      c.fillRect(px(x+w*.10),px(floor-h*1.08),px(w*.78),px(h*.3));
     }
-    if (theme === 'foundry') {
-      c.fillRect(px(x), px(floor - h * .7), px(w), px(h * .7));
-      c.fillRect(px(x + w * .13), px(floor - h * 1.16), px(w * .12), px(h * .55));
-      c.fillRect(px(x + w * .7), px(floor - h * 1.39), px(w * .15), px(h * .72));
-      ring(c, x + w * .49, floor - h * .39, w * .21, '#111514', 5);
-      for (let n = 0; n < 8; n++) {
-        const a = n * Math.PI / 4;
-        line(c, x + w * .49, floor - h * .39, x + w * .49 + Math.cos(a) * w * .20, floor - h * .39 + Math.sin(a) * w * .20, '#111514', 2);
-      }
-      return;
+    architectureDetail(c,x,floor,w,h,theme,0);
+  }
+
+  private drawMiddle(c:G,theme:string,x:number,floor:number,w:number,h:number,i:number,color:string){
+    if(theme==='orchard'){this.tree(c,x+w*.5,floor,h*1.5,color,i+32);architectureDetail(c,x,floor,w,h,theme,1);return;}
+    if(theme==='abyss'){polygon(c,[x,floor,x+w*.2,floor-h*.6,x+w*.38,floor-h*1.24,x+w*.5,floor-h*.98,x+w*.76,floor-h*.52,x+w,floor],color);for(let k=0;k<7;k++)line(c,x+k*w*.13,floor-h*.11,x+k*w*.13+4,floor-h*(.45+k%3*.16),'#486168');return;}
+    c.fillStyle=color;c.fillRect(px(x),px(floor-h*.82),px(w),px(h*.82));
+    c.fillStyle='#152127';c.fillRect(px(x+w*.08),px(floor-h*.72),px(w*.19),px(h*.62));
+    c.fillRect(px(x+w*.72),px(floor-h*.72),px(w*.19),px(h*.62));
+    c.fillStyle=color;c.fillRect(px(x+w*.04),px(floor-h*.89),px(w*.93),4);
+    if(theme==='foundry'){
+      ring(c,x+w*.5,floor-h*.53,w*.23,'#0a1112',5);ring(c,x+w*.5,floor-h*.53,w*.18,'#7a654e',2);
+      for(let k=0;k<12;k++){const a=k*Math.PI/6;line(c,x+w*.5+Math.cos(a)*w*.22,floor-h*.53+Math.sin(a)*w*.22,x+w*.5+Math.cos(a)*w*.29,floor-h*.53+Math.sin(a)*w*.29,'#9b7752',2);}
+      c.fillStyle='#bc6b39';c.fillRect(px(x+w*.38),px(floor-h*.16),px(w*.26),2);
+    }else if(theme==='prison'){
+      for(let k=0;k<6;k++){c.fillStyle='#071014';c.fillRect(px(x+w*(.12+k*.14)),px(floor-h*.69),px(w*.09),px(h*.52));line(c,x+w*(.16+k*.14),floor-h*.66,x+w*(.16+k*.14),floor-h*.2,'#728683');}
+    }else if(theme==='choir'){
+      ring(c,x+w*.5,floor-h*.62,w*.28,'#080e13',7);brokenOrbit(c,x+w*.5,floor-h*.62,w*.19,'#877777');
+      for(let k=0;k<3;k++){c.fillStyle='#4c464e';c.fillRect(px(x+w*(.32+k*.16)),px(floor-h*.34),3,px(h*.34));}
+    }else if(theme==='belfry'){
+      c.fillStyle=color;c.fillRect(px(x+w*.31),px(floor-h*1.23),px(w*.38),px(h*.46));
+      ring(c,x+w*.5,floor-h*.98,w*.17,'#0a1015',4);brokenOrbit(c,x+w*.5,floor-h*.98,w*.10,'#888d81');
+    }else if(theme==='flood'){
+      arch(c,x+w*.5,floor-h*.03,w*.50,h*.76,'#071419');ring(c,x+w*.5,floor-h*.60,w*.13,'#5c787a',3);
+    }else if(theme==='archives'){
+      c.fillStyle='#171c1a';c.fillRect(px(x+w*.28),px(floor-h*.68),px(w*.42),px(h*.56));
+      for(let k=0;k<5;k++)line(c,x+w*.27,floor-h*(.12+k*.13),x+w*.74,floor-h*(.12+k*.13),'#777e66',2);
+    }else{
+      arch(c,x+w*.5,floor-h*.02,w*.37,h*.66,'#091316');
+      if(i%3===0)paintMoth(c,x+w*.5,floor-h*.77,Math.max(5,w*.14),'#797d72');
+      for(let k=0;k<3;k++){c.fillStyle='#778477';c.fillRect(px(x+w*.04),px(floor-h*(.2+k*.24)),2,2);}
     }
-    if (theme === 'prison') {
-      c.fillRect(px(x), px(floor - h * .9), px(w), px(h * .9));
-      for (let n = 0; n < 5; n++) { c.fillStyle = '#101415'; c.fillRect(px(x + n * w / 5 + 3), px(floor - h * .72), px(w / 8), px(h * .45)); c.fillStyle = color; }
-      c.fillRect(px(x + w * .40), px(floor - h * 1.35), px(w * .2), px(h * .5));
-      return;
-    }
-    // Buttressed cathedral, archive, drowned tower, belfry, choir and throne variations.
-    c.fillRect(px(x), px(floor - h * .65), px(w), px(h * .65));
-    arch(c, x + w * .5, floor - h * .35, w * .47, h * .97, '#0c1011');
-    c.fillStyle = color;
-    c.fillRect(px(x + w * .05), px(floor - h * .91), px(w * .14), px(h * .94));
-    c.fillRect(px(x + w * .81), px(floor - h * .91), px(w * .14), px(h * .94));
-    polygon(c, [x + w * .02, floor - h * .91, x + w * .12, floor - h * 1.2, x + w * .2, floor - h * .91], color);
-    polygon(c, [x + w * .8, floor - h * .91, x + w * .88, floor - h * 1.2, x + w * .98, floor - h * .91], color);
-    if (theme === 'archives') {
-      for (let n = 0; n < 5; n++) { c.fillStyle = '#61625b'; c.fillRect(px(x + w * .31 + n * w * .075), px(floor - h * .38), px(w * .05), px(h * .28)); }
-    } else if (theme === 'belfry') {
-      ring(c, x + w * .5, floor - h * .73, w * .17, '#0c1011', 3);
-      c.fillStyle = '#98948a'; c.fillRect(px(x + w * .46), px(floor - h * .66), px(w * .08), px(h * .11));
-    } else if (theme === 'choir') {
-      for (let n = 0; n < 7; n++) c.fillRect(px(x + w * .28 + n * w * .067), px(floor - h * (.46 + (n % 3) * .1)), px(w * .045), px(h * (.38 + (n % 3) * .1)));
-    } else if (theme === 'throne') {
-      polygon(c, [x + w * .3, floor - h * .68, x + w * .5, floor - h * 1.45, x + w * .7, floor - h * .68], '#1a1418');
-    } else if (theme === 'flood') {
-      line(c, x, floor - h * .33, x + w, floor - h * .35, '#7a8584', 1);
-    }
-    if (i % 3 === 0 && theme !== 'archives') { c.globalAlpha = .35; line(c, x + w * .22, floor - h * .52, x + w * .7, floor - h * .56, edge, 1); c.globalAlpha = 1; }
+    architectureDetail(c,x,floor,w,h,theme,1);
   }
 
   private drawNear(c: G, theme: string, x: number, floor: number, w: number, h: number, i: number, color: string) {
@@ -303,23 +342,36 @@ export class GameRenderer {
     }
     line(c, x, floor - h * .23, x + w, floor - h * .23, '#59605e', 2);
     if (theme === 'foundry') for (let n = 0; n < 4; n++) line(c, x + n * w / 4, floor - h * .8, x + n * w / 4 + 7, floor - h * .18, '#0b0d0c', 2);
-    if (theme === 'belfry') cross(c, x + w * .5, floor - h * .28, 20, color);
+    if (theme === 'belfry') brokenOrbit(c, x + w * .5, floor - h * .45, 10, '#566868');
     if (theme === 'crypt' || theme === 'choir' || theme === 'throne') {
       for (let n = 0; n < 3; n++) arch(c, x + (n + .5) * w / 3, floor - h * .2, w * .16, h * .25, '#080b0c');
-      if (i % 2 === 0) cross(c, x + w * .75, floor - h * .25, 15, '#272d2b');
+      if (i % 4 === 0) paintMoth(c, x + w * .75, floor - h * .38, 10, '#394441');
     }
   }
 
-  private tree(c: G, x: number, foot: number, h: number, color: string, seed: number) {
-    const trunk = Math.max(3, h * .055);
-    line(c, x, foot, x + h * .03, foot - h * .76, color, trunk);
-    for (let i = 0; i < 5; i++) {
-      const y = foot - h * (.36 + i * .105), dir = i % 2 ? 1 : -1;
-      const tipX = x + dir * h * (.23 + hash(seed * 51 + i) * .15);
-      const tipY = y - h * (.14 + hash(seed * 17 + i) * .13);
-      line(c, x, y, tipX, tipY, color, Math.max(2, trunk * .5));
-      line(c, tipX, tipY, tipX + dir * h * .09, tipY - h * .09, color, 2);
+  private tree(c:G,x:number,foot:number,h:number,color:string,seed:number){
+    const trunk=Math.max(4,h*.065);
+    polygon(c,[x-trunk*.65,foot,x-trunk*.48,foot-h*.33,x-trunk*.2,foot-h*.69,x+trunk*.4,foot-h*.91,x+trunk*.72,foot-h*.51,x+trunk*.5,foot],color);
+    line(c,x+trunk*.23,foot-h*.08,x+trunk*.30,foot-h*.72,'#647466',1);
+    for(let k=0;k<9;k++){
+      const y=foot-h*(.12+k*.078);c.fillStyle='#111d1d';c.fillRect(px(x-trunk*.35+hash(seed+k)*trunk*.4),px(y),Math.max(2,px(trunk*.5)),1);
     }
+    for(let i=0;i<7;i++){
+      const y=foot-h*(.28+i*.083),dir=i%2?1:-1;
+      const tx=x+dir*h*(.19+hash(seed*51+i)*.17),ty=y-h*(.10+hash(seed*17+i)*.18);
+      polygon(c,[x,y-trunk*.18,tx,ty,tx+dir*h*.04,ty-h*.06,tx-dir*3,ty+5,x,y+trunk*.32],color);
+      line(c,x+dir*trunk*.6,y,tx-dir*3,ty+2,'#4a6256',1);
+      line(c,tx,ty,tx+dir*h*.075,ty-h*.08,color,2);
+      for(let k=0;k<4;k++){
+        const bx=tx-dir*k*7,by=ty+k*3;c.fillStyle=k%2?color:'#243e36';
+        c.fillRect(px(bx),px(by),2,4);c.fillRect(px(bx-dir*3),px(by+2),3,2);
+      }
+      if(i%2===0){
+        line(c,tx-dir*8,ty+5,tx-dir*8,ty+h*.17,'#31463b');
+        c.fillStyle='#51614c';c.fillRect(px(tx-dir*8-2),px(ty+h*.17),4,5);c.fillStyle='#a2a48a';c.fillRect(px(tx-dir*8-1),px(ty+h*.17),2,1);
+      }
+    }
+    for(let k=0;k<4;k++)line(c,x,foot-h*.08,x+(k-1.5)*trunk*1.9,foot+3,color,2);
   }
 
   private drawLandmark(x:number,y:number,h:number,t:number){
@@ -358,12 +410,12 @@ export class GameRenderer {
       for(let i=0;i<9;i++){const a=i*Math.PI*2/9;line(c,x+Math.cos(a)*s*.95,y+Math.sin(a)*s*.95,x+Math.cos(a)*s*1.3,y+Math.sin(a)*s*1.3,'#465b60');}
       line(c,x,y+s*.85,x,y+s*1.5,'#97c3c6');
     }else if(this.theme==='throne'){
-      // The bell is the false moon; its red seam reveals the engine inside.
-      polygon(c,[x-s,y+s*.7,x-s*.68,y-s*.65,x-s*.3,y-s,x+s*.3,y-s,x+s*.68,y-s*.65,x+s,y+s*.7],'#827978');
-      polygon(c,[x-s*.7,y+s*.45,x-s*.48,y-s*.5,x,y-s*.75,x+s*.48,y-s*.5,x+s*.7,y+s*.45],'#191214');
-      line(c,x-s,y+s*.7,x+s,y+s*.7,'#b9a9a1',3);ring(c,x,y-s*1.05,s*.19,'#7b7270',3);
-      line(c,x,y-s*.65,x,y+s*.32,'#d5676a',2);c.fillStyle='#b59989';c.fillRect(px(x-4),px(y+s*.72),8,s*.3);
-      this.glow(x,y,s*.65,'#bc4e59',.11);
+      // The pressure engine is an octagonal vessel, with an exposed red coil.
+      polygon(c,[x-s*.75,y-s*.75,x-s*.35,y-s,x+s*.42,y-s,x+s*.86,y-s*.43,x+s*.75,y+s*.61,x+s*.3,y+s*.86,x-s*.42,y+s*.86,x-s*.86,y+s*.4],'#53505b');
+      polygon(c,[x-s*.52,y-s*.60,x+s*.40,y-s*.63,x+s*.63,y-s*.28,x+s*.52,y+s*.42,x-s*.37,y+s*.58,x-s*.61,y+s*.23],'#151923');
+      for(let k=0;k<6;k++)line(c,x-s*.33,y-s*.38+k*s*.14,x+s*.38,y-s*.36+k*s*.14,'#b46876',2);
+      for(let k=0;k<8;k++){const a=k*Math.PI/4;const dx=x+Math.cos(a)*s*.80,dy=y+Math.sin(a)*s*.8;c.fillStyle='#a8a095';c.fillRect(px(dx),px(dy),2,2);}
+      brokenOrbit(c,x,y,s*.98,'#7b666f');this.glow(x,y,s*.6,'#cc647c',.12);
     }c.restore();void edge;void t;
   }
 
@@ -419,7 +471,7 @@ export class GameRenderer {
   private drawLayers(depth: number) {
     const layer = this.layers[depth]; if (!layer) return;
     const c = this.c, tile = layer.canvas, offset = ((this.camX * this.unit * layer.speed) % tile.width + tile.width) % tile.width;
-    c.save(); c.globalAlpha = layer.opacity;
+    c.save(); c.globalAlpha = layer.opacity*(this.backplate?(depth===0?.06:depth===1?.13:.55):1);
     for (let x = -offset - tile.width; x < this.width + tile.width; x += tile.width) c.drawImage(tile, px(x), 0);
     c.restore();
   }
@@ -442,7 +494,8 @@ export class GameRenderer {
     if (x > this.width + 20 || x + w < -20) return;
     const stone = this.tone.stone;
     c.fillStyle = '#080c0d'; c.fillRect(x - 2, y - 2, w + 4, h + 3);
-    c.fillStyle = stone; c.fillRect(x, y + 3, w, h - 3);
+    c.fillStyle = this.material??stone; c.save();c.translate(x,y);c.fillRect(0,3,w,h-3);c.restore();
+    c.fillStyle='#070e1040';c.fillRect(x,y+Math.max(8,h*.48),w,h*.52);
     c.fillStyle = '#77817c'; c.fillRect(x, y, w, 3);
     c.fillStyle = this.tone.edge; c.fillRect(x, y, w, 1);
     c.fillStyle = '#171d1b';
@@ -474,6 +527,10 @@ export class GameRenderer {
         polygon(c, [sx, y + 2, sx + 4, y + 4, sx, y + 6], '#8c948d');
       }
     }
+    // Walkable edges stay bright; chipped skirts and rubble live below the collision plane.
+    c.fillStyle='#a1ad942f';for(let i=0;i<w/9;i++){const dx=x+i*9;if(dx<0||dx>this.width)continue;c.fillRect(px(dx),y+2,2+(i%3),1);}
+    if(h>20){for(let i=0;i<w/31;i++){const sx=x+i*31+4,r=4+hash(i*91+p.x)*5;polygon(c,[sx,y+h-2,sx+9,y+h-2,sx+7,y+h+r,sx+2,y+h+r*.6],'#172a2c');}}
+    if(this.theme==='orchard'||this.theme==='flood'){c.fillStyle='#55705e';for(let i=0;i<w/13;i++){const dx=x+i*13+5;if(dx<0||dx>this.width)continue;c.fillRect(px(dx),y+1,4,2);c.fillRect(px(dx+2),y+3,1,3);}}
     this.stats.drawCalls++;
   }
 
@@ -612,30 +669,56 @@ export class GameRenderer {
     const size=Math.max(24,Math.round(this.unit*1.1*32/24));
     c.fillStyle='#020606';c.fillRect(x-Math.round(this.unit*.4),y,Math.round(this.unit*.8),2);
     c.save();c.translate(x,y);if(p.facing<0)c.scale(-1,1);
+    const feedback=p as typeof p & {invulnerability?:number;dashInvulnerability?:number};
+    if(feedback.invulnerability&&(this.reduced||Math.floor(t*18)%2))c.globalAlpha=this.reduced?.72:.42;
+    if(feedback.dashInvulnerability)this.glow(0,-size*.55,16,'#8bbacf',.16);
     const dx=-Math.round(size/2),dy=-Math.round(size*29/32);
+    if(p.attackTime>0){c.save();c.globalAlpha=.62;for(let k=0;k<15;k++){const angle=-1.2+k*.14,r=size*.55;const sx=Math.round(Math.cos(angle)*r),sy=Math.round(-size*.46+Math.sin(angle)*r);c.fillStyle=k<5?'#e0d3ae':'#91b8b3';c.fillRect(sx,sy,2,2);}c.restore();}
     if(p.dashTime>0){c.globalAlpha=.18;for(let k=1;k<3;k++)c.drawImage(this.sprites,7*32,0,32,32,dx-k*7,dy,size,size);c.globalAlpha=1;}
     c.imageSmoothingEnabled=false;c.drawImage(this.sprites,frame*32,0,32,32,dx,dy,size,size);c.restore();this.stats.drawCalls++;
   }
 
-  private drawEnemies(state: GameState, t: number) {
-    const enemies = (state as unknown as { enemies?: Array<{ x: number; y: number; active?: boolean; hp?: number; kind?: string; telegraph?: number }> }).enemies;
-    if (!enemies) return;
-    const c = this.c;
-    for (const e of enemies) {
-      if (e.active === false || (e.hp != null && e.hp <= 0)) continue;
-      const x = this.X(e.x), y = this.Y(e.y);
-      if (x < -30 || x > this.width + 30) continue;
-      const big = /boss|warden/.test(String(e.kind));
-      const height = big ? 64 : 34, width = big ? 22 : 11;
-      c.fillStyle = '#020505';
-      polygon(c, [x - width, y, x - width * .55, y - height * .75, x, y - height, x + width * .55, y - height * .75, x + width, y], '#030707');
-      c.fillStyle = '#48514e'; c.fillRect(x - width * .4, y - height * .68, width * .8, 2);
-      c.fillStyle = '#9caaa2'; c.fillRect(x - (big ? 6 : 3), y - height * .57, 2, 1); c.fillRect(x + (big ? 4 : 2), y - height * .57, 2, 1);
-      if (big) { polygon(c, [x - 16, y - height, x - 10, y - height - 16, x - 2, y - height - 7, x + 7, y - height - 19, x + 18, y - height], '#3c4240'); }
-      if (e.telegraph && e.telegraph > 0) { c.fillStyle = '#d6a77e'; c.globalAlpha = e.telegraph; c.fillRect(x - width, y - height - 7, width * 2 * e.telegraph, 2); c.globalAlpha = 1; }
-      if (!this.reduced) c.fillRect(x - 1, y - height - 2 + px(Math.sin(t * 3 + e.x) * 2), 2, 1);
+  private drawEnemies(state:GameState,t:number){
+    type EnemyArt={x:number;y:number;w:number;h:number;kind:string;health:number;maxHealth:number;phase:string;telegraph:number;facing:number;attackX:number;attackY:number;attackW:number;attackH:number};
+    const enemies=(state.stage as unknown as {enemies?:EnemyArt[]}).enemies??[];
+    const c=this.c;
+    for(const e of enemies){
+      if(e.health<=0||e.phase==='dead')continue;
+      const x=this.X(e.x+e.w*.5),y=this.Y(e.y);if(x< -90||x>this.width+90)continue;
+      const kind=e.kind==='regent'?3:e.kind==='marksman'?2:e.kind==='skirmisher'?1:0;
+      const pose=e.phase==='windup'?1:e.phase==='attack'?2:e.phase==='stagger'?3:0;
+      const sizeY=Math.max(34,px(e.h*this.unit*64/48)),sizeX=px(sizeY*.75);
+      if(e.phase==='windup'||e.phase==='attack'){
+        const ax=this.X(e.attackX),ay=this.Y(e.attackY+e.attackH),aw=Math.max(2,px(e.attackW*this.unit)),ah=Math.max(2,px(e.attackH*this.unit));
+        c.save();c.fillStyle=e.phase==='attack'?'#d4746550':'#e5b77b25';c.fillRect(ax,ay,aw,ah);
+        c.fillStyle=e.phase==='attack'?'#efa18d':'#e4c291';
+        c.fillRect(ax,ay+ah-1,aw,1);c.fillRect(ax,ay,2,3);c.fillRect(ax+aw-2,ay,2,3);
+        if(e.phase==='windup')for(let k=0;k<aw;k+=7)c.fillRect(ax+k,ay+ah-3,3,1);
+        c.restore();
+      }
+      c.fillStyle='#030a0e';c.fillRect(x-sizeX*.3,y,sizeX*.6,2);
+      c.save();c.translate(x,y);if(e.facing<0)c.scale(-1,1);
+      const tilt=e.phase==='attack'?2:0;
+      c.drawImage(this.enemySprites,kind*48,pose*64,48,64,-px(sizeX/2)+tilt,-px(sizeY*60/64),sizeX,sizeY);
+      c.restore();
+      if(e.phase==='stagger'){this.glow(x,y-sizeY*.5,20,'#d9c7a5',.16);for(let k=0;k<7;k++){const a=k*Math.PI*2/7; c.fillStyle=k%2?'#d7bc91':'#7cc2c4';c.fillRect(px(x+Math.cos(a)*14),px(y-sizeY*.5+Math.sin(a)*12),2,1);}}
+      if(e.health<e.maxHealth||e.phase==='windup'){
+        const bw=Math.min(36,sizeX),yy=y-sizeY-2;
+        c.fillStyle='#071018';c.fillRect(px(x-bw*.5)-1,yy-1,bw+2,4);
+        c.fillStyle='#c09d82';c.fillRect(px(x-bw*.5),yy,px(bw*e.health/e.maxHealth),2);
+      }
       this.stats.drawCalls++;
     }
+    const arena=(state as unknown as {arenaActive?:string|null}).arenaActive;
+    if(arena){
+      const a=(state.stage as unknown as {arenas?:Array<{id:string;x:number;w:number}>}).arenas?.find(a=>a.id===arena);
+      if(a)for(const wx of [a.x,a.x+a.w]){
+        const x=this.X(wx);if(x<0||x>this.width)continue;
+        const y=this.Y(0);c.save();c.globalAlpha=.35;for(let k=0;k<7;k++)c.fillRect(x+(k%2),y-k*7,1,4);c.restore();
+        brokenOrbit(c,x,y-51,4,'#a9b8a4');
+      }
+    }
+    void t;
   }
 
   private glow(x: number, y: number, r: number, color: string, alpha: number) {
@@ -659,7 +742,8 @@ export class GameRenderer {
     for (let wx = first; wx < this.camX + this.width / this.unit + 10; wx += 9) {
       const x = this.X(wx + 3), y = this.Y(0);
       if (x < -20 || x > this.width + 20) continue;
-      c.fillStyle = '#0b0f0e'; c.fillRect(x - 2, y - 32, 4, 26); c.fillRect(x - 5, y - 35, 10, 3);
+      c.fillStyle = '#0b171c'; c.fillRect(x - 2, y - 27, 4, 22);
+      polygon(c,[x-5,y-31,x-3,y-36,x+3,y-36,x+5,y-31,x+3,y-28,x-3,y-28],'#4e625c');
       this.drawFlame(x, y - 37, t, .72);
       // The warm pool catches a small patch of floor; pillars and masonry stay dark.
       const pool = c.createRadialGradient(x, y - 25, 2, x, y - 25, 65);
@@ -716,6 +800,7 @@ export class GameRenderer {
     this.camY += (nextY - this.camY) * easing;
     this.stats.drawCalls = 0; this.stats.triangles = 0;
     this.drawSky(elapsed);
+    this.drawBackplate();
     this.drawLayers(0); this.drawFog(elapsed, 0);
     this.drawLayers(1); this.drawWorldTorches(elapsed);
     this.drawFog(elapsed, 1); this.drawLayers(2);
@@ -728,6 +813,7 @@ export class GameRenderer {
     this.drawExit(state.stage, elapsed);
     this.drawEnemies(state, elapsed);
     this.drawPilgrim(state, elapsed);
+    this.drawForeground();
     this.finishFrame(elapsed);
     this.fpsT += Math.max(0, dt); this.fpsN++;
     if (this.fpsT > .55) { this.stats.fps = Math.round(this.fpsN / this.fpsT); this.fpsT = 0; this.fpsN = 0; }
@@ -735,6 +821,6 @@ export class GameRenderer {
 
   dispose() {
     if (this.media && this.onMotion) this.media.removeEventListener?.('change', this.onMotion);
-    this.layers = [];
+    this.layers = [];this.backplate=undefined;this.atlas.onload=null;
   }
 }

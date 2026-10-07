@@ -1,4 +1,4 @@
-/** Original, locally bundled sound. Cues are rate-limited with a controlled output mix. */
+/** Locally bundled score, environments, and cues. Nothing streams during play. */
 const CUES = {
   jump: { gain: .30, gap: .12 },
   dash: { gain: .42, gap: .25 },
@@ -13,14 +13,27 @@ const CUES = {
   complete: { gain: .40, gap: 1.5 },
   secret: { gain: .32, gap: .75 },
   page: { gain: .20, gap: .08 },
+  parry: { gain: .46, gap: .16 },
+  enemy_hit: { gain: .42, gap: .15 },
+  enemy_defeated: { gain: .36, gap: .20 },
+  heal: { gain: .33, gap: .60 },
 } as const;
 type Cue = keyof typeof CUES;
+// Chamber, mechanical, and late-game arrangements share a melodic identity.
+const SCORE_FAMILY = [0, 1, 0, 0, 1, 2, 1, 2, 2, 2];
+const EVENT_CUES: Record<string, Cue> = {
+  ending: 'complete', walljump: 'jump', guard: 'parry', hurt: 'stagger',
+  enemy_attack: 'attack', boss_attack: 'attack', encounter: 'boss_defeated',
+  arena_cleared: 'complete', boon: 'relic',
+};
 
 export class AudioDirector {
   private context?: AudioContext;
   private master?: GainNode;
-  private music?: AudioBufferSourceNode;
-  private musicGain?: GainNode;
+  private musicBus?: GainNode;
+  private effectsBus?: GainNode;
+  private layers: { source: AudioBufferSourceNode; gain: GainNode }[] = [];
+  private combatGain?: GainNode;
   private buffers = new Map<string, Promise<AudioBuffer>>();
   private lastCue = new Map<Cue, number>();
   private activeCues = 0;
@@ -28,12 +41,19 @@ export class AudioDirector {
   private disposed = false;
   muted = false;
   volume = .70;
+  musicVolume = .85;
+  effectsVolume = 1;
+  private intensity = 0;
 
   unlock() {
     if (this.disposed) return;
     if (!this.context) {
       this.context = new AudioContext();
       this.master = this.context.createGain();
+      this.musicBus = this.context.createGain();
+      this.effectsBus = this.context.createGain();
+      this.musicBus.connect(this.master);
+      this.effectsBus.connect(this.master);
       // Catch occasional stacked transients without pumping the quiet ambience.
       const limiter = this.context.createDynamicsCompressor();
       limiter.threshold.value = -10;
@@ -44,6 +64,8 @@ export class AudioDirector {
       this.master.connect(limiter);
       limiter.connect(this.context.destination);
       this.setVolume(this.volume);
+      this.setMusicVolume(this.musicVolume);
+      this.setEffectsVolume(this.effectsVolume);
       for (const name of ['jump', 'dash', 'attack', 'boss_hit', 'death', 'checkpoint'] as Cue[]) {
         void this.load(name).catch(() => {});
       }
@@ -52,10 +74,28 @@ export class AudioDirector {
   }
 
   setVolume(value: number) {
-    this.volume = Math.max(0, Math.min(1, value));
+    this.volume = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : .70;
     if (this.master && this.context) this.master.gain.setTargetAtTime(this.muted ? 0 : this.volume, this.context.currentTime, .025);
   }
   setMuted(value: boolean) { this.muted = value; this.setVolume(this.volume); }
+  setMusicVolume(value: number) {
+    this.musicVolume = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : .85;
+    if (this.musicBus && this.context) this.musicBus.gain.setTargetAtTime(this.musicVolume, this.context.currentTime, .05);
+  }
+  setEffectsVolume(value: number) {
+    this.effectsVolume = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1;
+    if (this.effectsBus && this.context) this.effectsBus.gain.setTargetAtTime(this.effectsVolume, this.context.currentTime, .025);
+  }
+  /** Beat-aligned percussion/low-string stem rises during active encounters. */
+  setIntensity(value: number) {
+    const next = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+    if (Math.abs(next - this.intensity) < .01) return;
+    this.intensity = next;
+    if (this.combatGain && this.context) {
+      this.combatGain.gain.cancelAndHoldAtTime(this.context.currentTime);
+      this.combatGain.gain.setTargetAtTime(next * .62, this.context.currentTime, next > 0 ? .45 : .8);
+    }
+  }
 
   private load(name: string): Promise<AudioBuffer> {
     let pending = this.buffers.get(name);
@@ -73,20 +113,20 @@ export class AudioDirector {
   }
 
   play(event: string) {
-    const name = (event === 'ending' ? 'complete' : event === 'walljump' ? 'jump' : event) as Cue;
-    if (!(name in CUES) || !this.context || !this.master || this.muted || this.disposed) return;
+    const name = (EVENT_CUES[event] ?? event) as Cue;
+    if (!(name in CUES) || !this.context || !this.effectsBus || this.muted || this.disposed) return;
     const cue = CUES[name];
     const now = this.context.currentTime;
     if (now - (this.lastCue.get(name) ?? -Infinity) < cue.gap || this.activeCues >= 4) return;
     this.lastCue.set(name, now);
     void this.load(name).then(buffer => {
-      if (!this.context || !this.master || this.context.state !== 'running' || this.muted || this.disposed || this.activeCues >= 4) return;
+      if (!this.context || !this.effectsBus || this.context.state !== 'running' || this.muted || this.disposed || this.activeCues >= 4) return;
       const source = this.context.createBufferSource();
       const gain = this.context.createGain();
       source.buffer = buffer;
       gain.gain.value = cue.gain * 2.4;
       source.connect(gain);
-      gain.connect(this.master);
+      gain.connect(this.effectsBus);
       this.activeCues++;
       source.onended = () => { this.activeCues--; source.disconnect(); gain.disconnect(); };
       source.start();
@@ -97,36 +137,53 @@ export class AudioDirector {
     if (!Number.isInteger(chapter) || chapter < 0 || chapter > 9) return;
     this.unlock();
     this.stop();
+    this.intensity = 0;
     const token = this.epoch;
-    void this.load(`chapter-${String(chapter + 1).padStart(2, '0')}`).then(buffer => {
-      if (token !== this.epoch || !this.context || !this.master || this.disposed) return;
-      const source = this.context.createBufferSource();
-      const gain = this.context.createGain();
-      source.buffer = buffer;
-      source.loop = true;
-      gain.gain.setValueAtTime(0, this.context.currentTime);
-      gain.gain.linearRampToValueAtTime(1.10, this.context.currentTime + 2);
-      source.connect(gain);
-      gain.connect(this.master);
-      source.start();
-      this.music = source;
-      this.musicGain = gain;
+    const family = SCORE_FAMILY[chapter] + 1;
+    // Keep one decoded score pair and one environment, rather than accumulating
+    // every chapter's resampled float buffers on mobile.
+    for (const name of this.buffers.keys()) {
+      if ((name.startsWith('score-') && name !== `score-${family}`) ||
+          (name.startsWith('combat-') && name !== `combat-${family}`) ||
+          (name.startsWith('chapter-') && name !== `chapter-${String(chapter + 1).padStart(2, '0')}`)) this.buffers.delete(name);
+    }
+    void Promise.all([
+      this.load(`score-${family}`),
+      this.load(`combat-${family}`),
+      this.load(`chapter-${String(chapter + 1).padStart(2, '0')}`),
+    ]).then(buffers => {
+      if (token !== this.epoch || !this.context || !this.musicBus || this.disposed) return;
+      // One clock/start point preserves phase between exploration and encounter stems.
+      const at = this.context.currentTime + .03;
+      buffers.forEach((buffer, i) => {
+        const source = this.context!.createBufferSource();
+        const gain = this.context!.createGain();
+        source.buffer = buffer;
+        source.loop = true;
+        gain.gain.setValueAtTime(0, at);
+        gain.gain.linearRampToValueAtTime(i === 0 ? .80 : i === 1 ? this.intensity * .62 : .16, at + 1.5);
+        source.connect(gain);
+        gain.connect(this.musicBus!);
+        source.start(at);
+        this.layers.push({ source, gain });
+        if (i === 1) this.combatGain = gain;
+      });
     }).catch(error => console.warn('Chapter audio unavailable', chapter + 1, error));
   }
 
   stop() {
     this.epoch++;
-    if (this.music && this.musicGain && this.context) {
+    if (this.context) {
       const now = this.context.currentTime;
-      this.musicGain.gain.cancelScheduledValues(now);
-      this.musicGain.gain.setValueAtTime(this.musicGain.gain.value, now);
-      this.musicGain.gain.linearRampToValueAtTime(0, now + .25);
-      try { this.music.stop(now + .26); } catch { /* already stopped */ }
-      const oldMusic = this.music, oldGain = this.musicGain;
-      oldMusic.onended = () => { oldMusic.disconnect(); oldGain.disconnect(); };
+      for (const { source, gain } of this.layers) {
+        gain.gain.cancelAndHoldAtTime(now);
+        gain.gain.linearRampToValueAtTime(0, now + .4);
+        try { source.stop(now + .41); } catch { /* already stopped */ }
+        source.onended = () => { source.disconnect(); gain.disconnect(); };
+      }
     }
-    this.music = undefined;
-    this.musicGain = undefined;
+    this.layers = [];
+    this.combatGain = undefined;
   }
   suspend() { if (this.context?.state === 'running') void this.context.suspend().catch(() => {}); }
   dispose() {

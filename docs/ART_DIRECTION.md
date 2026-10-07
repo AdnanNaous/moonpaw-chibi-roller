@@ -10,16 +10,16 @@ Each chapter has a strong distant landmark and a distinct threat language:
 
 | Chapter | Skyline and near field | Main visual warning |
 | --- | --- | --- |
-| Crypt Court | Buttressed court, grave crosses, and knife-like roofs | Portcullis bars and red floor cue |
+| Crypt Court | Cliff-cut terraces, round tunnel vaults and broken orbit markers | Portcullis bars and red floor cue |
 | Foundry | Chimneys, gear housings, broken rail machinery | Hammer shadow and hot piston |
-| Flooded Cloister | Drowned arches and water marks | Rising pale tide line |
+| Flooded Cistern | Drowned waterworks and water marks | Rising pale tide line |
 | Vanishing Archive | Stacks, ink-dark windows, and narrow bridges | Fading bridge surface |
 | Bell Spine | Tall bell towers and exposed windward edges | Hanging blades and wind direction |
 | Hungry Orchard | Skeletal branch canopies and low roots | Upright hunter silhouette |
 | Prison Ramparts | High walls, barred openings, and rain | Horizontal red sight line |
-| Rotating Choir | Organ-like pillars and ruined chapels | Sweeping metal disc |
+| Rotating Engine | Mechanical wheel housings and industrial chambers | Sweeping metal disc |
 | Unlit Below | Broken mineral masses and the largest empty sky | Crawling darkness edge |
-| Throne of Bells | Spiked court and high throne shape | Crowned Warden windup |
+| Throne of Bells | Pressure vessel, exposed coils and sealed industrial court | Regent windup |
 
 Light is sparse and local. The moon is cold and partly eaten by shadow. Torches cast small amber pools. Pickups and checkpoints have restrained halos; they do not light the whole scene. Near architecture cuts across far light and fog to imply depth. Use a fixed number of gradients and particles per frame, stable seeded texture, and quality-dependent weather counts. Reduced motion holds decorative drift still while gameplay animation and hazard state remain visible.
 

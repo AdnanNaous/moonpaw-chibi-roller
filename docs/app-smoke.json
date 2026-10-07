@@ -8,9 +8,12 @@
     "keyboard movement",
     "jump",
     "pause",
-    "credits links"
+    "credits links",
+    "separate audio settings",
+    "exit dialog cancellation",
+    "native quit"
   ],
-  "moved": 4.342083333333324,
-  "airborne": 1.0696874999999988,
+  "moved": 4.445763888888879,
+  "airborne": 1.1320312499999985,
   "errors": []
 }

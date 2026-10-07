@@ -1,0 +1,20 @@
+{
+  "condition": "Full master/music/effects, full encounter stem, four overlapping loud cues at 0.5/8/13 seconds. Stereo OfflineAudioContext, actual compressor settings; electrical headroom only.",
+  "results": [
+    {
+      "family": 1,
+      "maximumVolumeStackedPeak": 0.8112084865570068,
+      "rms": 0.1485239126512311
+    },
+    {
+      "family": 2,
+      "maximumVolumeStackedPeak": 0.8103655576705933,
+      "rms": 0.14685261113179526
+    },
+    {
+      "family": 3,
+      "maximumVolumeStackedPeak": 0.839967668056488,
+      "rms": 0.15660802946086336
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 const {contextBridge,ipcRenderer}=require('electron');
 contextBridge.exposeInMainWorld('moonpawDesktop',{
+  quit:()=>ipcRenderer.invoke('moonpaw:quit'),
   toggleFullscreen:()=>ipcRenderer.invoke('moonpaw:fullscreen-toggle'),
   isFullscreen:()=>ipcRenderer.invoke('moonpaw:fullscreen-state'),
   onFullscreenChange:(callback)=>{

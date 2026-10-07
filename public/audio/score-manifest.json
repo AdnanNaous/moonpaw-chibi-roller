@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "renderer": "SpessaSynth 4.3.22",
+  "instrumentBank": "GeneralUser GS 2.0.3",
+  "source": "https://github.com/mrbumpy409/GeneralUser-GS",
+  "arrangement": "Original 24-bar question, answer, and development; no borrowed melodies.",
+  "tracks": [
+    {
+      "name": "score-1",
+      "title": "Salt Beneath the Glass",
+      "bpm": 76,
+      "bars": 24,
+      "seconds": 75.78945833333333,
+      "notes": 337,
+      "sampleRate": 24000,
+      "channels": 2,
+      "peak": 0.6200000047683716,
+      "rms": 0.10260950641192502,
+      "seamJump": 0
+    },
+    {
+      "name": "combat-1",
+      "title": "Salt Beneath the Glass",
+      "bpm": 76,
+      "bars": 24,
+      "seconds": 75.78945833333333,
+      "notes": 416,
+      "sampleRate": 24000,
+      "channels": 2,
+      "peak": 0.6200000047683716,
+      "rms": 0.07405607269352754,
+      "seamJump": 0
+    },
+    {
+      "name": "score-2",
+      "title": "The Iron Orchard",
+      "bpm": 96,
+      "bars": 24,
+      "seconds": 60,
+      "notes": 465,
+      "sampleRate": 24000,
+      "channels": 2,
+      "peak": 0.6200000047683716,
+      "rms": 0.09445827456146802,
+      "seamJump": 0
+    },
+    {
+      "name": "combat-2",
+      "title": "The Iron Orchard",
+      "bpm": 96,
+      "bars": 24,
+      "seconds": 60,
+      "notes": 440,
+      "sampleRate": 24000,
+      "channels": 2,
+      "peak": 0.6200000047683716,
+      "rms": 0.08771830693355376,
+      "seamJump": 0
+    },
+    {
+      "name": "score-3",
+      "title": "No Name for the Night",
+      "bpm": 108,
+      "bars": 24,
+      "seconds": 53.333333333333336,
+      "notes": 465,
+      "sampleRate": 24000,
+      "channels": 2,
+      "peak": 0.6200000047683716,
+      "rms": 0.11576187451935684,
+      "seamJump": 0
+    },
+    {
+      "name": "combat-3",
+      "title": "No Name for the Night",
+      "bpm": 108,
+      "bars": 24,
+      "seconds": 53.333333333333336,
+      "notes": 440,
+      "sampleRate": 24000,
+      "channels": 2,
+      "peak": 0.6200000047683716,
+      "rms": 0.07978203904521103,
+      "seamJump": 0
+    }
+  ]
+}
