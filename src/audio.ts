@@ -1,4 +1,6 @@
 /** Locally bundled score, environments, and cues. Nothing streams during play. */
+import {FoleyPalette,type Surface} from './audio-foley';
+import type {GameState} from './types';
 const CUES = {
   jump: { gain: .30, gap: .12 },
   dash: { gain: .42, gap: .25 },
@@ -32,6 +34,16 @@ export class AudioDirector {
   private master?: GainNode;
   private musicBus?: GainNode;
   private effectsBus?: GainNode;
+  private musicFilter?:BiquadFilterNode;
+  private foley?:FoleyPalette;
+  private titleRequested=false;
+  private titlePlayback=false;
+  private titleChapter=0;
+  private lastMotion?:{stage:string;stride:number;grounded:boolean;fall:number;dash:boolean;dead:number};
+  private cueSerial=0;
+  private uiClock=-Infinity;
+  private titleTellAt=0;
+  private duck=1;
   private layers: { source: AudioBufferSourceNode; gain: GainNode }[] = [];
   private combatGain?: GainNode;
   private buffers = new Map<string, Promise<AudioBuffer>>();
@@ -52,8 +64,10 @@ export class AudioDirector {
       this.master = this.context.createGain();
       this.musicBus = this.context.createGain();
       this.effectsBus = this.context.createGain();
-      this.musicBus.connect(this.master);
+      this.musicFilter=this.context.createBiquadFilter();this.musicFilter.type='lowpass';this.musicFilter.frequency.value=8500;
+      this.musicBus.connect(this.musicFilter);this.musicFilter.connect(this.master);
       this.effectsBus.connect(this.master);
+      this.foley=new FoleyPalette(this.context,this.effectsBus);
       // Catch occasional stacked transients without pumping the quiet ambience.
       const limiter = this.context.createDynamicsCompressor();
       limiter.threshold.value = -10;
@@ -71,6 +85,7 @@ export class AudioDirector {
       }
     }
     if (this.context.state === 'suspended') void this.context.resume().catch(() => {});
+    if(this.titleRequested){this.titleRequested=false;this.start(this.titleChapter,true);}
   }
 
   setVolume(value: number) {
@@ -80,7 +95,7 @@ export class AudioDirector {
   setMuted(value: boolean) { this.muted = value; this.setVolume(this.volume); }
   setMusicVolume(value: number) {
     this.musicVolume = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : .85;
-    if (this.musicBus && this.context) this.musicBus.gain.setTargetAtTime(this.musicVolume, this.context.currentTime, .05);
+    if (this.musicBus && this.context) this.musicBus.gain.setTargetAtTime(this.musicVolume*this.duck, this.context.currentTime, .05);
   }
   setEffectsVolume(value: number) {
     this.effectsVolume = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1;
@@ -95,6 +110,37 @@ export class AudioDirector {
       this.combatGain.gain.cancelAndHoldAtTime(this.context.currentTime);
       this.combatGain.gain.setTargetAtTime(next * .62, this.context.currentTime, next > 0 ? .45 : .8);
     }
+  }
+
+  enterTitle(chapter=0){
+    this.titleChapter=Math.max(0,Math.min(9,chapter));this.titleRequested=true;
+    if(this.context){this.titleRequested=false;this.start(this.titleChapter,true);}
+  }
+  ui(kind:'focus'|'confirm'|'back'){
+    if(!this.context||this.muted||this.disposed)return;
+    const now=this.context.currentTime;if(now-this.uiClock<(kind==='focus'?.085:.13))return;
+    this.uiClock=now;this.foley?.play(kind,kind==='focus'?.65:.85);
+  }
+  /** Foot contacts use traveled distance, not the frame clock or key repeat. */
+  tickMotion(state:GameState,dt:number){
+    if(!this.context||this.disposed)return;
+    const p=state.player,previous=this.lastMotion;
+    const moving=state.mode==='playing'&&p.deadTime<=0;
+    const target=state.mode==='paused'?.60:1;
+    if(target!==this.duck){this.duck=target;this.setMusicVolume(this.musicVolume);}
+    if(this.titlePlayback&&state.mode==='menu'&&this.context.currentTime>this.titleTellAt){
+      this.titleTellAt=this.context.currentTime+9+(this.cueSerial++%3)*2;
+      if(!this.muted)this.foley?.play('tell',.32,(this.cueSerial%2?1:-1)*.45,.85);
+    }
+    if(previous&&previous.stage===state.stage.id&&moving&&!this.muted){
+      const surface:Surface=state.stage.theme==='flood'?'water':['foundry','prison','choir'].includes(state.stage.theme)?'iron':state.stage.theme==='archives'?'wood':'stone';
+      if(p.grounded&&p.dashTime<=0&&Math.abs(p.vx)>.5&&Math.floor(p.stride/.52)>Math.floor(previous.stride/.52))this.foley?.play(surface,.60+(this.cueSerial++%3)*.06,0,.95+(this.cueSerial%3)*.035);
+      if(p.grounded&&!previous.grounded&&previous.fall< -3)this.foley?.play('land',Math.min(1.1,.24+Math.abs(previous.fall)*.055),0,.9);
+      if(p.dashTime>0&&!previous.dash)this.foley?.play('cloth',.95);
+    }
+    if(previous&&p.deadTime>0&&previous.dead===0)this.foley?.stop();
+    this.lastMotion={stage:state.stage.id,stride:p.stride,grounded:p.grounded,fall:p.vy,dash:p.dashTime>0,dead:p.deadTime};
+    void dt;
   }
 
   private load(name: string): Promise<AudioBuffer> {
@@ -112,7 +158,7 @@ export class AudioDirector {
     return pending;
   }
 
-  play(event: string) {
+  play(event: string,position:{pan?:number;strength?:number}={}) {
     const name = (EVENT_CUES[event] ?? event) as Cue;
     if (!(name in CUES) || !this.context || !this.effectsBus || this.muted || this.disposed) return;
     const cue = CUES[name];
@@ -123,20 +169,25 @@ export class AudioDirector {
       if (!this.context || !this.effectsBus || this.context.state !== 'running' || this.muted || this.disposed || this.activeCues >= 4) return;
       const source = this.context.createBufferSource();
       const gain = this.context.createGain();
+      const pan=this.context.createStereoPanner();pan.pan.value=Math.max(-.65,Math.min(.65,position.pan??0));
       source.buffer = buffer;
-      gain.gain.value = cue.gain * 2.4;
+      const variant=this.cueSerial++%5;
+      source.playbackRate.value=['attack','enemy_hit','jump','dash'].includes(name)?.96+variant*.02:1;
+      gain.gain.value = cue.gain * 2.4 * Math.max(.3,Math.min(1.2,position.strength??1));
       source.connect(gain);
-      gain.connect(this.effectsBus);
+      gain.connect(pan);pan.connect(this.effectsBus);
       this.activeCues++;
-      source.onended = () => { this.activeCues--; source.disconnect(); gain.disconnect(); };
+      source.onended = () => { this.activeCues--; source.disconnect(); gain.disconnect();pan.disconnect(); };
       source.start();
     }).catch(error => console.warn('Audio cue unavailable', name, error));
   }
 
-  start(chapter: number) {
+  start(chapter: number,title=false) {
     if (!Number.isInteger(chapter) || chapter < 0 || chapter > 9) return;
-    this.unlock();
+    this.titleRequested=false;this.unlock();
     this.stop();
+    this.titlePlayback=title;this.lastMotion=undefined;this.titleTellAt=(this.context?.currentTime??0)+5;
+    if(this.musicFilter&&this.context)this.musicFilter.frequency.setTargetAtTime(title?1800:8500,this.context.currentTime,.8);
     this.intensity = 0;
     const token = this.epoch;
     const family = SCORE_FAMILY[chapter] + 1;
@@ -161,7 +212,7 @@ export class AudioDirector {
         source.buffer = buffer;
         source.loop = true;
         gain.gain.setValueAtTime(0, at);
-        gain.gain.linearRampToValueAtTime(i === 0 ? .80 : i === 1 ? this.intensity * .62 : .16, at + 1.5);
+        gain.gain.linearRampToValueAtTime(i === 0 ? title?.48:.80 : i === 1 ? this.intensity * .62 : title?.21:.16, at + (title?3.5:1.5));
         source.connect(gain);
         gain.connect(this.musicBus!);
         source.start(at);
@@ -173,6 +224,7 @@ export class AudioDirector {
 
   stop() {
     this.epoch++;
+    this.titlePlayback=false;this.titleRequested=false;this.lastMotion=undefined;this.foley?.stop();
     if (this.context) {
       const now = this.context.currentTime;
       for (const { source, gain } of this.layers) {
@@ -191,6 +243,7 @@ export class AudioDirector {
     this.stop();
     this.disposed = true;
     this.buffers.clear();
+    this.foley?.dispose();
     void this.context?.close().catch(() => {});
   }
 }

@@ -35,3 +35,11 @@ A Creative Claw Lyria instrumental generation was attempted but rejected before 
 [mix-validation.json](../public/audio/mix-validation.json) records a stereo OfflineAudioContext render at full master/music/effects volume with a fully active encounter stem and four overlapping loud cues at three times. Peak values were 0.8112, 0.8104, and 0.8400 for the three arrangements through the actual compressor settings. This verifies electrical headroom in that tested mix, not every conceivable combination or perceived loudness.
 
 A browser test using the real `AudioDirector` verified the three playing layers, independent volume buses, encounter fade, parry/hit loading, pause/resume, decoded-buffer eviction, equal stem lengths, and closing its audio context. The audio was not auditioned by a human on speakers, headphones, a physical phone, or a controller setup during this automated work. Musical quality and fatigue still need that listening review.
+
+## v0.4 interaction and contact sound
+
+The existing three arrangements remain. Title playback is armed without creating an AudioContext; the first user interaction starts the current chapter arrangement with a slow fade and a low-pass treatment. Pause reduces the music bus to 60 percent of its selected level, then restores it on resume. This is a different presentation of the score, not an additional recorded title track.
+
+`src/audio-foley.ts` renders small original stone, iron, wood, water, landing, cloth and UI textures once per audio context. Foot contacts follow traveled distance rather than frame timing. Variations are deterministic; a six-voice cap and ended-source cleanup bound simultaneous Foley. Existing cues keep their four-voice limit and gain controls, with slight attack/jump/dash variation. Both sets pass through the master compressor. All these sounds are synthesized; no field recordings are claimed.
+
+Additional runtime checks verified deferred title playback, title filtering, finite Foley samples, the six-voice cap, cleanup, pause gain recovery, mute and context disposal. Perceived quality has not been human-auditioned here.

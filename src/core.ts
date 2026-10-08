@@ -29,6 +29,10 @@ export class Game {
   private staminaDelay = 0;
   private attackHits = new Set<string>();
   private boonOffered = false;
+  private jumpAge = 0;
+  private jumpCut = false;
+  private wallKick = 0;
+  private dashDirection = 1;
 
   constructor(save?: SaveData) {
     // `unlocked` is a count: 1 means only stage zero is available.
@@ -44,7 +48,7 @@ export class Game {
   }
 
   private newPlayer(x: number, y: number): Player {
-    return { x, y, vx: 0, vy: 0, grounded: false, facing: 1, dashTime: 0, dashReady: true, deadTime: 0, wall: 0, stamina: 100, attackTime: 0, health: 5, maxHealth: 5, invulnerability: 0, dashInvulnerability: 0, combo: 0, comboTime: 0 };
+    return { x, y, vx: 0, vy: 0, grounded: false, facing: 1, dashTime: 0, dashReady: true, deadTime: 0, wall: 0, stamina: 100, attackTime: 0, health: 5, maxHealth: 5, invulnerability: 0, dashInvulnerability: 0, combo: 0, comboTime: 0, stride:0, landingTime:0 };
   }
 
   private emit(event: string) { this.state.event = event; this.state.eventId++; }
@@ -63,6 +67,7 @@ export class Game {
     this.coyote = 0; this.buffer = 0; this.groundedOn = ''; this.crumble.clear();
     this.hazardX = new Map(stage.hazards.map(h => [h.id, h.x]));
     this.attackCooldown = 0; this.attackBuffer = 0; this.dashCooldown = 0; this.staminaDelay = 0; this.attackHits.clear(); this.boonOffered = false;
+    this.jumpAge=0;this.jumpCut=false;this.wallKick=0;this.dashDirection=1;
   }
 
   pause() { if (this.state.mode === 'playing') { this.state.mode = 'paused'; this.emit('pause'); } }
@@ -105,6 +110,8 @@ export class Game {
     s.time += dt;
     this.animateWorld(dt);
     if (p.deadTime > 0) { p.deadTime = Math.max(0, p.deadTime - dt); return; }
+    p.landingTime=Math.max(0,p.landingTime-dt);
+    this.jumpAge+=dt;this.wallKick=Math.max(0,this.wallKick-dt);
     p.invulnerability = Math.max(0, p.invulnerability - dt);
     p.dashInvulnerability = Math.max(0, p.dashInvulnerability - dt);
     p.comboTime = Math.max(0, p.comboTime - dt);
@@ -120,17 +127,19 @@ export class Game {
     else this.buffer = Math.max(0, this.buffer - dt);
     this.coyote = p.grounded ? COYOTE : Math.max(0, this.coyote - dt);
     const move = clamp(input.move || 0, -1, 1);
-    if (Math.abs(move) > .12) p.facing = Math.sign(move);
+    if (Math.abs(move) > .12 && p.dashTime<=0 && this.wallKick<=0) p.facing = Math.sign(move);
 
     if (this.buffer > 0 && (p.grounded || this.coyote > 0 || p.wall !== 0)) {
       p.vy = JUMP;
-      if (p.wall) p.vx = -p.wall * 8;
+      if (p.wall) {p.vx = -p.wall * 8;p.facing=-p.wall;this.wallKick=.13;}
       p.grounded = false; p.wall = 0; this.groundedOn = '';
+      this.jumpAge=0;this.jumpCut=false;p.landingTime=0;
       this.buffer = 0; this.coyote = 0; this.emit('jump');
     }
     const dashCost = s.boon === 'rush' ? 26 : DASH_COST;
     if (input.dashPressed && p.dashReady && this.dashCooldown <= 0 && p.stamina >= dashCost) {
       p.dashTime = .19; p.dashInvulnerability = .16; p.dashReady = false; p.stamina -= dashCost; this.staminaDelay = .48;
+      this.dashDirection=p.facing;
       this.dashCooldown = .36;
       p.vy = Math.max(p.vy, 1.1); this.emit('dash');
     }
@@ -143,14 +152,16 @@ export class Game {
     }
     if (p.dashTime > 0) {
       p.dashTime = Math.max(0, p.dashTime - dt);
-      p.vx = p.facing * DASH;
+      p.vx = p.dashTime>0?this.dashDirection * DASH:move*(s.boon==='rush'?7.15:RUN);
     } else {
       const target = move * (s.boon === 'rush' ? 7.15 : RUN) + (p.grounded ? 0 : s.stage.wind);
-      const accel = p.grounded ? 52 : 34;
-      p.vx += clamp(target - p.vx, -accel * dt, accel * dt);
+      const braking=Math.abs(move)<.12||move*p.vx<0;
+      const accel = p.grounded ? braking?78:60 : braking?38:42;
+      if(this.wallKick<=0)p.vx += clamp(target - p.vx, -accel * dt, accel * dt);
       p.vy -= GRAVITY * dt;
-      // Releasing jump cuts upward travel; a held jump reaches full height.
-      if (!input.jump && p.vy > 0) p.vy -= 22 * dt;
+      // One intentional release cut gives a predictable short hop rather than
+      // continuously changing gravity after a finger leaves the button.
+      if (!input.jump && !this.jumpCut && this.jumpAge>=.055 && p.vy>0){p.vy*=.48;this.jumpCut=true;}
     }
 
     const oldOn = this.groundedOn;
@@ -177,7 +188,7 @@ export class Game {
     }
     if (p.wall && p.vy < -3) p.vy = -3;
 
-    const previousY = p.y;
+    const previousY = p.y, wasGrounded=p.grounded,fallSpeed=p.vy;
     p.y += p.vy * dt;
     p.grounded = false; this.groundedOn = '';
     if (p.vy <= 0) {
@@ -189,6 +200,7 @@ export class Game {
       }
       if (landing) {
         p.y = landing.y; p.vy = 0; p.grounded = true; p.dashReady = true; this.groundedOn = landing.id;
+        if(!wasGrounded&&fallSpeed< -3)p.landingTime=.12;
         if (landing.kind === 'crumble' && !this.crumble.has(landing.id)) this.crumble.set(landing.id, .48);
       }
     } else {
@@ -200,6 +212,9 @@ export class Game {
         }
       }
     }
+
+    // Distance-based animation keeps foot contacts aligned at every speed.
+    if(p.grounded&&p.dashTime<=0)p.stride+=Math.abs(p.x-previousX);
 
     this.updateCombat(dt);
     const arena = s.stage.arenas.find(a => a.id === s.arenaActive);
@@ -443,6 +458,7 @@ export class Game {
     p.x = s.checkpoint.x; p.y = s.checkpoint.y;
     p.vx = 0; p.vy = 0; p.grounded = false; p.wall = 0; p.dashTime = 0; p.dashReady = true; p.stamina = 100; p.attackTime = 0;
     p.deadTime = .46; this.coyote = 0; this.buffer = 0; this.groundedOn = ''; this.attackBuffer = 0; this.dashCooldown = 0;
+    this.wallKick=0;this.jumpCut=false;this.jumpAge=0;p.stride=0;p.landingTime=0;
     p.health = p.maxHealth; p.invulnerability = .8; p.dashInvulnerability = 0; p.combo = 0; p.comboTime = 0;
     s.arenaActive = null;
     for (const arena of s.stage.arenas) {

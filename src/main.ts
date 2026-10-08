@@ -10,6 +10,7 @@ import {FullscreenControl} from './fullscreen';
 import {canExit,exitLabel,exitApplication,onAndroidBack} from './platform';
 import {loadSave,storeSave,loadSettings,storeSettings} from './storage';
 import type {InputFrame,Quality} from './types';
+import {icon,titleScreen,journeyScreen} from './ui';
 
 const app=document.querySelector<HTMLElement>('#app')!;
 const canvas=document.querySelector<HTMLCanvasElement>('#game')!;
@@ -22,14 +23,16 @@ const renderer=new GameRenderer(canvas,settings.quality);
 renderer.setStage(game.state.stage);
 renderer.setReducedMotion(settings.reducedMotion);
 document.body.classList.toggle('large-touch',settings.largeTouch);
+document.body.classList.toggle('reduce-motion',settings.reducedMotion);
 const touch=matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0;
 document.body.classList.toggle('touch',touch);
-controls.innerHTML=`<div id="move-pad" role="slider" tabindex="0" aria-label="Movement" aria-orientation="horizontal" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0"><div class="stick-ring"><i class="thumb"></i></div><span>MOVE</span></div><div class="action-pad"><button data-touch="attack" aria-label="Strike"><i>⟋</i><span>STRIKE</span></button><button data-touch="dash" aria-label="Roll"><i>↠</i><span>DODGE</span></button><button data-touch="jump" aria-label="Jump"><i>⌃</i><span>JUMP</span></button></div>`;
+controls.innerHTML=`<div id="move-pad" role="slider" tabindex="0" aria-label="Movement" aria-orientation="horizontal" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0"><div class="stick-ring"><i class="thumb"></i></div><span>MOVE</span></div><div class="action-pad"><button data-touch="attack" aria-label="Strike">${icon('strike')}<span>STRIKE</span></button><button data-touch="dash" aria-label="Roll">${icon('dodge')}<span>DODGE</span></button><button data-touch="jump" aria-label="Jump">${icon('jump')}<span>JUMP</span></button></div>`;
 let dock=new TouchDock(controls,input);
 controls.addEventListener('pointerdown',()=>audio.unlock());
 type Page='title'|'chapters'|'settings'|'credits'|'journal'|'exit'|'pacts';
 let page:Page='title';
 let settingsTab:'audio'|'display'|'controls'='audio',exitReturn:Page='title';
+let previewChapter=game.save.unlocked-1;
 let intro=-1,ending:EndingKey|undefined,lastMode='',lastEvent=-1;
 let clock=performance.now(),accumulator=0,elapsed=0,fps=60,navDelay=0,noticeExpiry=0;
 let lastHud=0,pawClicks=0,sequence='';
@@ -41,16 +44,16 @@ const button=(label:string,action:string,kind='')=>`<button data-action="${actio
 const exitButton=()=>canExit?button(exitLabel,'exit','exit-link'):'';
 const pactInfo={fang:{name:'Serrated Fang',detail:'Your third consecutive strike deals double damage. Keep pressure on the enemy; the combo fades quickly.'},ward:{name:'Iron Carapace',detail:'Seven health instead of five. Each strike costs more stamina. A durable, deliberate build.'},rush:{name:'Cinder Step',detail:'Faster movement and cheaper dodges. Trade careful positioning for close, aggressive pressure.'}};
 const fullscreen=new FullscreenControl(updateFullscreen);
-const fullscreenButton=(compact=false)=>fullscreen.supported?`<button data-action="fullscreen" class="${compact?'pause':'plain'}" aria-label="${fullscreen.active?'Exit fullscreen':'Fullscreen'}" title="${fullscreen.active?'Exit fullscreen':'Fullscreen'} (F11)">${compact?'⛶':fullscreen.active?'Exit fullscreen':'Fullscreen'}</button>`:'';
-function updateFullscreen(){document.querySelectorAll<HTMLButtonElement>('[data-action=fullscreen]').forEach(b=>{b.setAttribute('aria-label',fullscreen.active?'Exit fullscreen':'Fullscreen');b.title=`${fullscreen.active?'Exit fullscreen':'Fullscreen'} (F11)`;b.textContent=b.classList.contains('pause')?'⛶':fullscreen.active?'Exit fullscreen':'Fullscreen';});}
+const fullscreenButton=(compact=false)=>fullscreen.supported?`<button data-action="fullscreen" class="${compact?'pause':'plain'}" aria-label="${fullscreen.active?'Exit fullscreen':'Fullscreen'}" title="${fullscreen.active?'Exit fullscreen':'Fullscreen'} (F11)">${compact?icon('full'):fullscreen.active?'Exit fullscreen':'Fullscreen'}</button>`:'';
+function updateFullscreen(){document.querySelectorAll<HTMLButtonElement>('[data-action=fullscreen]').forEach(b=>{b.setAttribute('aria-label',fullscreen.active?'Exit fullscreen':'Fullscreen');b.title=`${fullscreen.active?'Exit fullscreen':'Fullscreen'} (F11)`;b.innerHTML=b.classList.contains('pause')?icon('full'):fullscreen.active?'Exit fullscreen':'Fullscreen';});}
 const reset=()=>{dock.dispose();dock=new TouchDock(controls,input);input.reset();};
-function notice(text:string,duration=6500){narration.hidden=false;narration.textContent=text;noticeExpiry=elapsed+duration/1000;}
+function notice(text:string,duration=6500){narration.hidden=false;narration.classList.add('visible');narration.textContent=text;noticeExpiry=elapsed+duration/1000;}
 function stageStart(index:number){
   audio.unlock();game.start(index);renderer.setStage(game.state.stage);intro=0;ending=undefined;page='title';
   game.pause();reset();audio.start(index);discovered.add(`${index}:intro`);persistJournal();sync();
 }
-function begin(){intro=-1;game.resume();reset();sync();canvas.focus();notice(game.state.stage.description,8500);}
-function title(){intro=-1;ending=undefined;game.menu();audio.stop();page='title';renderer.setStage(game.state.stage);reset();sync();}
+function begin(){intro=-1;game.resume();reset();sync();canvas.focus();notice(game.state.stage.description,6500);}
+function title(){intro=-1;ending=undefined;game.menu();audio.enterTitle(game.save.unlocked-1);page='title';renderer.setStage(game.state.stage);reset();sync();}
 function credits(){return `<p>Created & directed by <strong>Adnan Naous</strong>.</p><p>Pixel artwork, story, original musical arrangements and engineering developed with Codex. Prototype explored with Grok.</p><p class="quiet">Movement, combat pressure and layered fantasy worlds informed the direction. No artwork, characters or soundtrack from the referenced games was copied.</p><p class="quiet">Instrument samples: GeneralUser GS, S. Christian Collins. Used for original game arrangements under its music-production license. <a href="https://github.com/mrbumpy409/GeneralUser-GS" target="_blank" rel="noopener noreferrer">Instrument source ↗</a></p><nav class="links">${CREATOR_LINKS.map(l=>`<a href="${l.url}" target="_blank" rel="noopener noreferrer">${escape(l.label)} ↗</a>`).join('')}</nav><p class="quiet">For the ones who were never named.</p>`;}
 function journal(){
   const records=STAGE_INFO.flatMap((stage,i)=>{
@@ -70,35 +73,47 @@ function secondary(){
   }
   if(page==='credits')return `<h2>Credits</h2>${credits()}`;
   if(page==='journal')return `<h2>The witnesses</h2><div class="journal">${journal()}</div>`;
-  return `<h2>Ten thresholds</h2><div class="chapters">${STAGE_INFO.map((s,i)=>`<button data-stage="${i}" ${i>=game.save.unlocked?'disabled':''}><span>${String(i+1).padStart(2,'0')}</span><strong>${escape(s.name)}</strong><small>${i>=game.save.unlocked?'Locked':escape(s.subtitle)}</small></button>`).join('')}</div>`;
+  return journeyScreen(game.save,previewChapter);
 }
 function sync(){
   const mode=game.state.mode,menu=mode==='menu';lastMode=mode;
   document.body.dataset.mode=menu?'menu':intro>=0?'story':mode;
-  hud.hidden=menu;controls.hidden=menu||!touch;narration.hidden=menu;
+  hud.hidden=menu||intro>=0;controls.hidden=menu||!touch||intro>=0;narration.hidden=menu||intro>=0;
   controls.classList.toggle('disabled',mode!=='playing');
-  hud.innerHTML=menu?'':`<div class="identity"><small>${String(game.state.stageIndex+1).padStart(2,'0')} / 10</small><strong>${escape(game.state.stage.name)}</strong></div><div class="vitals"><div id="health" role="meter" aria-label="Health" aria-valuemin="0"></div><div class="stamina" role="meter" aria-label="Stamina" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i></i></div><span id="relics" title="Recovered names"></span></div><div id="opponent" hidden><small></small><div role="meter" aria-label="Enemy health" aria-valuemin="0"><i></i></div></div><div class="window-actions">${fullscreenButton(true)}${button('Ⅱ','pause','pause')}</div>`;
-  if(menu&&page==='title')app.innerHTML=`<section class="title-screen"><div class="seal" aria-hidden="true">◌</div><p class="eyebrow">A DARK PIXEL ACTION GAME</p><h1>MOONPAW</h1><p class="subtitle">ASHEN VOW</p><p class="premise">A city sealed inside a bell.<br>Ten stolen names. One way to break it.</p>${button(game.save.unlocked>1?'Continue':'Enter the crypt','start','primary')}${button('Chapters','chapters','plain')}<nav class="title-nav">${button('Settings','settings')}${button('Journal','journal')}${button('Credits','credits')}${fullscreenButton()}${exitButton()}</nav><p class="version">ADNAN NAOUS · 0.3.0</p></section>`;
-  else if(menu||page!=='title')app.innerHTML=`<section class="sheet ${page==='settings'?'settings-sheet':page==='pacts'?'pact-sheet':''}">${page==='pacts'?'':button('← Back','back','back')}${secondary()}</section>`;
-  else if(intro>=0){const chapter=CHAPTERS[game.state.stageIndex],line=chapter.lines[intro];app.innerHTML=`<section class="dialog"><p class="eyebrow">${escape(chapter.tag)}</p><h2>${escape(game.state.stage.name)}</h2><p class="speaker">${escape(line.speaker)}</p><p class="story-text">${escape(line.text)}</p><div class="dialog-actions">${button(intro===chapter.lines.length-1?'Begin':'Continue','story-next','primary')}${button('Begin now','begin','plain')}</div><p class="quiet">${escape(game.state.stage.description)}</p></section>`;}
+  hud.innerHTML=menu?'':`<div class="vitals"><span class="vital-emblem">${icon('seal')}</span><div><div id="health" role="meter" aria-label="Health" aria-valuemin="0"></div><div class="stamina" role="meter" aria-label="Stamina" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i></i></div></div></div><div class="identity"><small>THRESHOLD ${String(game.state.stageIndex+1).padStart(2,'0')}</small><strong>${escape(game.state.stage.name)}</strong><span id="objective"></span></div><div class="window-actions"><span id="relics" title="Recovered names"></span>${fullscreenButton(true)}<button data-action="pause" class="pause" aria-label="Pause">${icon('pause')}</button></div><div id="opponent" hidden><small></small><div role="meter" aria-label="Enemy health" aria-valuemin="0"><i></i></div></div>`;
+  if(menu&&page==='title')app.innerHTML=titleScreen(game.save,fullscreenButton(),exitButton());
+  else if(menu||page!=='title')app.innerHTML=`<section class="sheet ${page==='settings'?'settings-sheet':page==='pacts'?'pact-sheet':page==='chapters'?'journey-sheet':''}">${page==='pacts'?'':button('← Back','back','back')}${secondary()}</section>`;
+  else if(intro>=0){const chapter=CHAPTERS[game.state.stageIndex],line=chapter.lines[intro];app.innerHTML=`<section class="dialog story-dialog"><div class="story-chapter"><span>${String(game.state.stageIndex+1).padStart(2,'0')}</span><div><p class="eyebrow">${escape(chapter.tag)}</p><h2>${escape(game.state.stage.name)}</h2></div></div><div class="story-body"><p class="speaker">${escape(line.speaker)}</p><p class="story-text">${escape(line.text)}</p></div><div class="dialog-actions"><span class="story-progress" aria-label="${intro+1} of ${chapter.lines.length}">${chapter.lines.map((_,i)=>`<i class="${i<=intro?'read':''}"></i>`).join('')}</span>${button(intro===chapter.lines.length-1?'Begin':'Continue','story-next','primary')}${button('Begin now','begin','plain')}</div></section>`;}
   else if(mode==='paused')app.innerHTML=`<section class="dialog"><p class="eyebrow">THE BELL IS STILL</p><h2>Pause</h2>${button('Resume','resume','primary')}<nav class="pause-nav">${button('Journal','journal')}${button('Settings','settings')}${button('Restart','restart')}${button('Title','title')}${exitButton()}</nav></section>`;
   else if(mode==='complete')app.innerHTML=`<section class="dialog"><p class="eyebrow">A NAME CARRIED BEYOND THE GATE</p><h2>${escape(game.state.stage.name)}</h2><p class="story-text">${escape(CHAPTERS[game.state.stageIndex].after)}</p>${button('Cross the next threshold','next','primary')}${button('Title','title','plain')}</section>`;
   else if(mode==='ending')app.innerHTML=ending?`<section class="dialog ending"><p class="eyebrow">${ENDINGS[ending].tag}</p><h2>${ENDINGS[ending].title}</h2>${ENDINGS[ending].lines.map(l=>`<p>${escape(l)}</p>`).join('')}${button('Credits','ending-credits','primary')}${button('Title','title','plain')}</section>`:`<section class="dialog"><p class="eyebrow">THE REGENT FALLS SILENT</p><h2>What will you give?</h2><p>${escape(CHAPTERS[9].after)}</p>${button('Give your name','ending-lantern','choice')}${button('Leave alone','ending-home','choice')}${button('Name every witness','ending-dawn','choice')}<p class="quiet">${game.save.secrets?.length||0}/10 memories recovered. Every witness is needed to break the bell.</p></section>`;
   else app.innerHTML='';
   app.classList.toggle('open',!!app.innerHTML);
+  app.classList.toggle('title-open',menu&&page==='title');
+  app.classList.toggle('story-open',intro>=0&&page==='title');
+  document.body.dataset.page=page;
+  renderer.setPresentation(menu?'title':'game');
   app.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action!)));
-  app.querySelectorAll<HTMLButtonElement>('[data-stage]').forEach(b=>b.addEventListener('click',()=>stageStart(Number(b.dataset.stage))));
+  app.querySelectorAll<HTMLButtonElement>('[data-stage]').forEach(b=>{b.addEventListener('click',()=>stageStart(Number(b.dataset.stage)));b.addEventListener('focus',()=>previewJourney(Number(b.dataset.stage)));b.addEventListener('pointerenter',()=>previewJourney(Number(b.dataset.stage)));});
   app.querySelectorAll<HTMLButtonElement>('[data-settings-tab]').forEach(b=>b.addEventListener('click',()=>{settingsTab=b.dataset.settingsTab as typeof settingsTab;sync();}));
   app.querySelectorAll<HTMLButtonElement>('[data-pact]').forEach(b=>b.addEventListener('click',()=>{if(game.selectBoon(b.dataset.pact as 'fang'|'ward'|'rush')){page='title';game.resume();reset();sync();canvas.focus();notice('Your pact is carried through this chapter.',4500);}}));
   hud.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action!)));
   app.querySelector<HTMLSelectElement>('#quality')?.addEventListener('change',e=>{settings.quality=(e.target as HTMLSelectElement).value as Quality;renderer.setQuality(settings.quality);storeSettings(settings);});
   for(const [id,key,set] of [['volume','volume',(v:number)=>audio.setVolume(v)],['music-volume','musicVolume',(v:number)=>audio.setMusicVolume(v)],['effects-volume','effectsVolume',(v:number)=>audio.setEffectsVolume(v)]] as const)app.querySelector<HTMLInputElement>(`#${id}`)?.addEventListener('input',e=>{const value=Number((e.target as HTMLInputElement).value);settings[key]=value;set(value);const output=app.querySelector<HTMLOutputElement>(`output[for="${id}"]`);if(output)output.value=`${Math.round(value*100)}%`;storeSettings(settings);});
-  app.querySelector<HTMLInputElement>('#reduced-motion')?.addEventListener('change',e=>{settings.reducedMotion=(e.target as HTMLInputElement).checked;renderer.setReducedMotion(settings.reducedMotion);storeSettings(settings);});
+  app.querySelector<HTMLInputElement>('#reduced-motion')?.addEventListener('change',e=>{settings.reducedMotion=(e.target as HTMLInputElement).checked;renderer.setReducedMotion(settings.reducedMotion);document.body.classList.toggle('reduce-motion',settings.reducedMotion);storeSettings(settings);});
   app.querySelector<HTMLInputElement>('#large-touch')?.addEventListener('change',e=>{settings.largeTouch=(e.target as HTMLInputElement).checked;document.body.classList.toggle('large-touch',settings.largeTouch);reset();renderer.resize();storeSettings(settings);});
   updateHud();renderer.resize();
 }
+function previewJourney(index:number){
+  if(page!=='chapters'||index===previewChapter)return;
+  previewChapter=index;
+  const wrapper=document.createElement('div');wrapper.innerHTML=journeyScreen(game.save,index);
+  const detail=wrapper.querySelector('.journey-detail');if(detail)app.querySelector('.journey-detail')?.replaceWith(detail);
+  app.querySelectorAll<HTMLButtonElement>('[data-stage]').forEach(b=>b.setAttribute('aria-current',Number(b.dataset.stage)===index?'step':'false'));
+}
 function action(key:string){
   audio.unlock();
+  audio.ui(['back','title','exit-cancel'].includes(key)?'back':'confirm');
   if(key==='fullscreen'){void fullscreen.toggle().catch(()=>notice('Fullscreen is unavailable in this window. Use F11 in the desktop app.'));return;}
   if(key==='sound-test'){audio.play('attack');return;}
   if(key==='exit'){if(game.state.mode==='playing'){game.pause();reset();}exitReturn=page;page='exit';sync();return;}
@@ -125,11 +140,12 @@ function updateHud(){
   const s=game.state,bar=hud.querySelector<HTMLElement>('.stamina i'),meter=hud.querySelector('.stamina');
   if(bar)bar.style.width=`${Math.max(0,s.player.stamina)}%`;
   meter?.setAttribute('aria-valuenow',String(Math.round(s.player.stamina)));
-  const relics=hud.querySelector('#relics');if(relics)relics.textContent=`◌ ${s.relicsCollected}/${s.relicsRequired}`;
-  const health=hud.querySelector('#health');if(health){health.setAttribute('aria-valuenow',String(s.player.health));health.setAttribute('aria-valuemax',String(s.player.maxHealth));health.textContent='◆'.repeat(s.player.health)+'◇'.repeat(s.player.maxHealth-s.player.health);}
+  const relics=hud.querySelector('#relics');if(relics)relics.innerHTML=`<span aria-hidden="true">${icon('seal')}</span><b>${s.relicsCollected}<small> / ${s.relicsRequired}</small></b>`;
+  const health=hud.querySelector('#health');if(health){health.setAttribute('aria-valuenow',String(s.player.health));health.setAttribute('aria-valuemax',String(s.player.maxHealth));const value=`${s.player.health}/${s.player.maxHealth}`;if(health.getAttribute('data-health')!==value){health.setAttribute('data-health',value);health.innerHTML=Array.from({length:s.player.maxHealth},(_,i)=>`<i class="${i<s.player.health?'filled':''}" aria-hidden="true"></i>`).join('');}}
+  const objective=hud.querySelector('#objective');if(objective)objective.textContent=s.arenaActive?'THE WAY IS SEALED':`${s.stage.arenas.filter(a=>a.cleared).length} / 3 ENCOUNTERS`;
   const opponent=hud.querySelector<HTMLElement>('#opponent'),enemy=s.stage.enemies.filter(e=>e.arena===s.arenaActive&&e.health>0).sort((a,b)=>Math.abs(a.x-s.player.x)-Math.abs(b.x-s.player.x))[0];
   if(opponent){opponent.hidden=!enemy;if(enemy){opponent.querySelector('small')!.textContent=enemy.kind==='regent'?`REGENT · ${enemy.bossPhase}/3`:enemy.kind.toUpperCase();const meter=opponent.querySelector('[role=meter]')!;meter.setAttribute('aria-valuenow',String(enemy.health));meter.setAttribute('aria-valuemax',String(enemy.maxHealth));opponent.querySelector<HTMLElement>('i')!.style.width=`${enemy.health/enemy.maxHealth*100}%`;}}
-  if(elapsed>noticeExpiry)narration.textContent=s.warning||(!touch?'A/D move · Space jump · Shift roll · J strike':'');
+  if(elapsed>noticeExpiry){narration.textContent=s.warning||'';narration.classList.toggle('visible',Boolean(s.warning));}
 }
 function gamepadMenu(sample:InputFrame,dt:number){
   navDelay=Math.max(0,navDelay-dt);if(input.device!=='controller')return;
@@ -150,6 +166,7 @@ function frame(now:number){
   const sample=input.sample();
   if(game.state.mode==='playing'&&intro<0&&game.state.boonOptions.length){audio.play('arena_cleared');game.pause();reset();page='pacts';sync();}
   audio.setIntensity(game.state.arenaActive?1:0);
+  audio.tickMotion(game.state,dt);
   pending={...sample,jumpPressed:pending.jumpPressed||sample.jumpPressed,dashPressed:pending.dashPressed||sample.dashPressed,attackPressed:pending.attackPressed||sample.attackPressed,pausePressed:pending.pausePressed||sample.pausePressed};
   if(game.state.mode==='playing'){
     accumulator+=dt;let steps=0;
@@ -176,10 +193,12 @@ addEventListener('resize',()=>renderer.resize());
 addEventListener('blur',()=>{if(game.state.mode==='playing')action('pause');reset();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){if(game.state.mode==='playing')action('pause');reset();audio.suspend();}else clock=performance.now();});
 canvas.addEventListener('pointerdown',()=>audio.unlock());
+app.addEventListener('pointerover',e=>{if((e.target as HTMLElement).closest('button'))audio.ui('focus');});
+app.addEventListener('focusin',e=>{if((e.target as HTMLElement).closest('button,input,select'))audio.ui('focus');});
 addEventListener('pagehide',()=>{storeSave(game.save);persistJournal();});
 onAndroidBack(()=>{if(game.state.mode==='playing')action('pause');else if(page!=='title')action('back');else action('exit');});
 addEventListener('keydown',e=>{if(!e.repeat){sequence=(sequence+e.key).slice(-3);if(sequence==='351')notice('CELL 351 · A name the Regent could not take. Adnan was here.',9000);}});
 app.addEventListener('click',e=>{if((e.target as HTMLElement).closest('h1')&&++pawClicks===7){notice('Seven vows. Three still unbroken.',6000);pawClicks=0;}});
 Object.defineProperty(window,'moonpaw',{value:{get state(){return game.state;},get save(){return game.save;},get stats(){return {...renderer.stats,fps};}}});
-sync();requestAnimationFrame(frame);
+audio.enterTitle(game.save.unlocked-1);sync();requestAnimationFrame(frame);
 if('serviceWorker' in navigator&&location.protocol!=='moonpaw:'&&import.meta.env.PROD)void navigator.serviceWorker.register('./sw.js').catch(console.warn);

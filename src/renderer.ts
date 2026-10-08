@@ -1,5 +1,6 @@
-import {createPilgrimSprites, createEnemySprites} from './pixel-art';
-import {createMaterial, brokenOrbit, paintMoth, architectureDetail} from './world-art';
+import {createPilgrimSprites, createEnemySprites, PILGRIM_CELL, PILGRIM_POSE} from './pixel-art';
+import {structure} from './structures';
+import {brokenOrbit, paintMoth, architectureDetail} from './world-art';
 import type { GameState, Quality, Stage } from './types';
 
 type G = CanvasRenderingContext2D;
@@ -47,7 +48,8 @@ export class GameRenderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly sprites=createPilgrimSprites();
   private readonly enemySprites=createEnemySprites();
-  private material?:CanvasPattern;
+  private structures=new Map<string,HTMLCanvasElement>();
+  private titlePresentation=false;
   private foreground?:HTMLCanvasElement;
   private readonly atlas=new Image();
   private backplate?:HTMLCanvasElement;
@@ -135,6 +137,8 @@ export class GameRenderer {
     this.buildLayers();
   }
 
+  setPresentation(value:'title'|'game'){this.titlePresentation=value==='title';}
+
   setQuality(quality: Quality) { this.quality = quality; this.resize(); }
   setReducedMotion(value:boolean) { this.userReduced=value;this.reduced=value||Boolean(this.media?.matches); }
 
@@ -154,7 +158,7 @@ export class GameRenderer {
       layers.push({ canvas: tile, ...specs[depth] });
     }
     this.layers = layers;
-    this.material=this.c.createPattern(createMaterial(this.theme,this.tone.stone,this.tone.edge),'repeat')??undefined;
+    this.structures.clear();
     this.buildForeground(tileW);
     this.buildBackplate();
   }
@@ -220,10 +224,9 @@ export class GameRenderer {
       for(let yy=9;yy<h*.25;yy+=11){c.fillStyle='#41524a';c.fillRect(3,yy,2,2);}
       polygon(c,[w,0,w-23,0,w-12,h*.10,w,h*.18],'#071016');
     }
-    for(let i=0;i<w/14;i++){
-      const x=i*14,r=4+hash(i*61)*9,y=h-2;
-      polygon(c,[x-5,y,x-1,y-r,x+5,y-r*.55,x+11,y],'#050d12');
-      line(c,x-1,y-r,x+4,y-r*.65,'#2c4140');
+    for(let i=0;i<w/55;i++){
+      const x=i*55+hash(i*41)*18,r=2+hash(i*61)*6,y=h-1;
+      polygon(c,[x-9,y,x-5,y-r,x+8,y-r*.4,x+18,y],'#050d12');
       if(organic){line(c,x,y,x-3,y-r-3,'#10282a',2);c.fillStyle='#384b41';c.fillRect(px(x-6),px(y-r-2),4,1);}
     }
     this.foreground=tile;
@@ -489,48 +492,24 @@ export class GameRenderer {
   }
 
   private drawPlatform(p: Stage['platforms'][number], t: number) {
-    if (p.active === false) return;
-    const c = this.c, u = this.unit, x = this.X(p.x), y = this.Y(p.y), w = px(p.w * u), h = px(p.h * u);
-    if (x > this.width + 20 || x + w < -20) return;
-    const stone = this.tone.stone;
-    c.fillStyle = '#080c0d'; c.fillRect(x - 2, y - 2, w + 4, h + 3);
-    c.fillStyle = this.material??stone; c.save();c.translate(x,y);c.fillRect(0,3,w,h-3);c.restore();
-    c.fillStyle='#070e1040';c.fillRect(x,y+Math.max(8,h*.48),w,h*.52);
-    c.fillStyle = '#77817c'; c.fillRect(x, y, w, 3);
-    c.fillStyle = this.tone.edge; c.fillRect(x, y, w, 1);
-    c.fillStyle = '#171d1b';
-    for (let i = 0; i < p.w * 3; i++) {
-      const sx = x + px((i + .3) * u / 3);
-      if (sx > x + w - 2) break;
-      const crack = 3 + px(hash(i * 13 + p.x * 17) * Math.min(h - 5, 13));
-      c.fillRect(sx, y + 4, 1, crack);
-      if (i % 3 === 0) c.fillRect(sx + 1, y + crack + 2, 4, 1);
+    if(p.active===false)return;
+    const c=this.c,x=this.X(p.x),y=this.Y(p.y),w=Math.max(4,px(p.w*this.unit)),h=Math.max(4,px(p.h*this.unit));
+    if(x>this.width+25||x+w< -25)return;
+    const key=p.id;let art=this.structures.get(key);
+    if(!art){art=structure(this.stage!.theme,w,h,this.unit,p.x,p.h<1);this.structures.set(key,art);}
+    c.drawImage(art,x-4,y-2);
+    if(p.kind==='crumble'){
+      line(c,x+w*.25,y+2,x+w*.32,y+h,'#08171d',2);line(c,x+w*.59,y+3,x+w*.55,y+h,'#08171d',2);
+      c.fillStyle='#d1b49a';c.fillRect(x+5,y+1,4,1);
+    }else if(p.kind==='moving'){
+      brokenOrbit(c,x+8,y+h+4,3,this.tone.accent);brokenOrbit(c,x+w-9,y+h+4,3,this.tone.accent);
+      this.glow(x+w*.5,y+h,25,this.tone.accent,.07);
+    }else if(p.kind==='memory'){
+      c.save();c.globalAlpha=.25+(p.telegraph??0)*.4;c.fillStyle='#c1b9d7';c.fillRect(x,y,w,1);c.restore();
+    }else if(p.kind==='conveyor'){
+      c.fillStyle='#121e23';c.fillRect(x+2,y+2,w-4,3);
+      for(let i=0;i<w/15;i++){const sx=x+((i*15+(this.reduced?0:px(t*22)*(p.phase&&p.phase<0?-1:1)))%w+w)%w;c.fillStyle='#809993';c.fillRect(sx,y+2,4,1);}
     }
-    // Broken masonry, buttress seams and roots are authored detail, not flat boxes.
-    if (h > 24) for (let i = 0; i < w / 28; i++) {
-      const sx = x + i * 28 + 7;
-      c.fillStyle = '#242b28'; c.fillRect(sx, y + 18, 12, 1);
-      if (i % 2 === 0) { line(c, sx + 5, y + h - 2, sx - 3, y + h + 10, '#0b1010', 2); }
-    }
-    if (p.kind === 'crumble') {
-      c.fillStyle = '#b3a99b'; c.fillRect(x + 4, y - 1, 4, 2);
-      for (let i = 0; i < 3; i++) line(c, x + w * (.2 + i * .22), y + 2, x + w * (.25 + i * .22), y + h * .67, '#0d1111', 1);
-    }
-    if (p.kind === 'moving') {
-      c.fillStyle = this.tone.accent; c.globalAlpha = .55; c.fillRect(x + 4, y + h - 4, w - 8, 2); c.globalAlpha = 1;
-      ring(c, x + 7, y + h - 4, 3, '#1a2322'); ring(c, x + w - 7, y + h - 4, 3, '#1a2322');
-    }
-    if (p.kind === 'conveyor') {
-      c.fillStyle = '#171d1b'; c.fillRect(x + 2, y + 2, w - 4, 4);
-      for (let i = 0; i < w / 14; i++) {
-        const sx = x + ((i * 14 + (this.reduced ? 0 : px(t * 18) % 14)) % Math.max(w, 1));
-        polygon(c, [sx, y + 2, sx + 4, y + 4, sx, y + 6], '#8c948d');
-      }
-    }
-    // Walkable edges stay bright; chipped skirts and rubble live below the collision plane.
-    c.fillStyle='#a1ad942f';for(let i=0;i<w/9;i++){const dx=x+i*9;if(dx<0||dx>this.width)continue;c.fillRect(px(dx),y+2,2+(i%3),1);}
-    if(h>20){for(let i=0;i<w/31;i++){const sx=x+i*31+4,r=4+hash(i*91+p.x)*5;polygon(c,[sx,y+h-2,sx+9,y+h-2,sx+7,y+h+r,sx+2,y+h+r*.6],'#172a2c');}}
-    if(this.theme==='orchard'||this.theme==='flood'){c.fillStyle='#55705e';for(let i=0;i<w/13;i++){const dx=x+i*13+5;if(dx<0||dx>this.width)continue;c.fillRect(px(dx),y+1,4,2);c.fillRect(px(dx+2),y+3,1,3);}}
     this.stats.drawCalls++;
   }
 
@@ -628,54 +607,101 @@ export class GameRenderer {
   }
 
   private drawPickup(item: Stage['pickups'][number], t: number) {
-    if (item.collected) return;
-    const c = this.c, x = this.X(item.x), y = this.Y(item.y) + (this.reduced ? 0 : px(Math.sin(t * 2.1 + item.x) * 2));
-    if (x < -18 || x > this.width + 18) return;
-    const special = Boolean((item as unknown as { relic?: boolean; secret?: boolean }).relic || item.secret);
-    this.glow(x, y, special ? 18 : 12, special ? '#d6b9a0' : this.tone.accent, special ? .20 : .12);
-    c.fillStyle = '#101312'; c.fillRect(x - 4, y - 8, 8, 14);
-    polygon(c, [x, y - (special ? 11 : 7), x + 5, y - 1, x, y + 6, x - 5, y - 1], special ? '#d3c3ad' : '#b7c7bf');
-    c.fillStyle = special ? '#7b6759' : '#587771'; c.fillRect(x - 1, y - 4, 2, 7);
-    if (special) { c.fillStyle = '#f0d9b8'; c.fillRect(x - 1, y - 10, 2, 3); line(c, x - 7, y + 8, x + 7, y + 8, '#bca48c'); }
+    if(item.collected)return;
+    const c=this.c,x=this.X(item.x),y=this.Y(item.y)+(this.reduced?0:px(Math.sin(t*2+item.x)*1.5));
+    if(x< -30||x>this.width+30)return;
+    const relic=item.kind==='relic',record=item.secret;
+    if(relic){
+      // Lost names are wax-sealed vessels, distinct from loose shards.
+      this.glow(x,y,25,'#d6ba85',.18);
+      polygon(c,[x-7,y-11,x-3,y-15,x+3,y-15,x+7,y-11,x+6,y+8,x-6,y+8],'#0a171f');
+      polygon(c,[x-5,y-9,x-2,y-13,x+2,y-13,x+5,y-9,x+4,y+6,x-4,y+6],'#64756b');
+      c.fillStyle='#c6b68d';c.fillRect(x-4,y-11,8,2);c.fillRect(x-4,y+5,8,2);c.fillStyle='#1c3638';c.fillRect(x-3,y-7,6,10);
+      brokenOrbit(c,x,y-2,3,'#e4d4a0');line(c,x+5,y-7,x+10,y+7,'#9a6c52');c.fillStyle='#bf8061';c.fillRect(x+8,y+6,4,5);
+    }else if(record){
+      this.glow(x,y,18,'#b4cfca',.09);
+      polygon(c,[x-6,y-10,x+3,y-12,x+7,y-7,x+5,y+6,x-6,y+6],'#768e84');
+      polygon(c,[x-4,y-8,x+2,y-9,x+5,y-6,x+3,y+4,x-4,y+4],'#202f36');
+      for(let k=0;k<3;k++)line(c,x-2,y-5+k*3,x+2,y-6+k*3,'#b1c2b0');
+    }else{
+      this.glow(x,y,12,this.tone.accent,.12);polygon(c,[x,y-6,x+4,y-1,x,y+5,x-3,y-1],'#adcdc0');line(c,x,y-5,x,y+2,'#e1e5c7');
+    }
     this.stats.drawCalls++;
   }
 
-  private drawCheckpoint(cp: Stage['checkpoints'][number], t: number) {
-    const c = this.c, x = this.X(cp.x), y = this.Y(cp.y);
-    if (x < -20 || x > this.width + 20) return;
-    c.fillStyle = '#171d1c'; c.fillRect(x - 5, y - 26, 10, 26); c.fillRect(x - 8, y - 6, 16, 6);
-    polygon(c, [x - 6, y - 25, x, y - 36, x + 6, y - 25], '#747f79');
-    c.fillStyle = cp.active ? '#d2b17f' : '#697470'; c.fillRect(x - 2, y - 22, 4, 5);
-    if (cp.active) this.drawFlame(x, y - 25, t, .8);
+  private drawCheckpoint(cp:Stage['checkpoints'][number],t:number){
+    const c=this.c,x=this.X(cp.x),y=this.Y(cp.y);if(x< -45||x>this.width+45)return;
+    // A rest mechanism: a broken wheel, slung lamp and grounded counterweight.
+    polygon(c,[x-18,y,x-14,y-5,x+15,y-5,x+19,y,x+14,y+3,x-14,y+3],'#43564f');
+    line(c,x-12,y-4,x-10,y-42,'#2b4244',4);line(c,x-9,y-4,x-7,y-42,'#8aa093');
+    brokenOrbit(c,x-8,y-37,11,'#73877a');brokenOrbit(c,x-8,y-37,7,'#273e43');
+    line(c,x-7,y-37,x+8,y-32,'#b0a27d',2);line(c,x+8,y-32,x+8,y-18,'#797e62');
+    polygon(c,[x+2,y-22,x+14,y-22,x+12,y-11,x+4,y-11],cp.active?'#a59270':'#415d59');
+    c.fillStyle=cp.active?'#edcf99':'#8aa397';c.fillRect(x+6,y-20,4,7);
+    line(c,x-6,y-25,x-5,y-10,'#3c5552');c.fillStyle='#162b32';c.fillRect(x-9,y-12,8,9);
+    if(cp.active){this.drawFlame(x+8,y-17,t,.65);this.glow(x+5,y-13,48,'#ddb18a',.12);line(c,x-15,y-1,x+16,y-1,'#cdb990');}
     this.stats.drawCalls++;
   }
 
-  private drawExit(stage: Stage, t: number) {
-    const c = this.c, x = this.X(stage.exit.x), y = this.Y(stage.exit.y);
-    if (x < -35 || x > this.width + 35) return;
-    arch(c, x, y, 35, 69, '#adb5ab'); arch(c, x, y - 2, 25, 57, '#05090a');
-    c.fillStyle = '#37413e'; c.fillRect(x - 19, y - 8, 38, 8);
-    ring(c, x, y - 38, 12, '#778b86', 2);
-    this.glow(x, y - 35, 28, this.tone.accent, .10);
-    c.fillStyle = '#c6d2c9'; c.fillRect(x - 1, y - 45, 2, 3);
+  private drawExit(state:GameState,t:number) {
+    const {stage}=state,c=this.c,x=this.X(stage.exit.x),y=this.Y(stage.exit.y);
+    if(x< -45||x>this.width+45)return;
+    const ready=state.relicsCollected>=state.relicsRequired&&stage.arenas.every(a=>a.cleared)&&state.bossHealth<=0;
+    // Two witness seals and three encounter locks belong to the actual door mechanism.
+    polygon(c,[x-25,y,x-23,y-54,x-16,y-66,x,y-72,x+16,y-66,x+23,y-54,x+25,y],'#142831');
+    polygon(c,[x-20,y-3,x-18,y-53,x-12,y-61,x,y-66,x+12,y-61,x+18,y-53,x+20,y-3],'#586c67');
+    polygon(c,[x-14,y-4,x-14,y-51,x-8,y-57,x+8,y-57,x+14,y-51,x+14,y-4],'#07131c');
+    for(const side of [-1,1]){
+      const dx=x+side*(ready?17:7);
+      polygon(c,[dx-6,y-5,dx-6,y-49,dx,y-55,dx+6,y-49,dx+6,y-5],'#243c43');
+      line(c,dx-4,y-48,dx-4,y-8,'#81938a');
+      for(let k=0;k<5;k++){line(c,dx-3,y-42+k*7,dx+4,y-42+k*7,'#10242e');c.fillStyle='#9c947a';c.fillRect(dx+2,y-41+k*7,1,1);}
+      const sealed=state.relicsCollected>=(side<0?1:2);
+      brokenOrbit(c,x+side*21,y-34,5,sealed?'#c6ae80':'#3b5458');
+      if(sealed)this.glow(x+side*21,y-34,12,'#d0ac78',.14);
+    }
+    for(let k=0;k<3;k++){const xx=x+(k-1)*7,lit=stage.arenas[k]?.cleared;c.fillStyle=lit?'#b9c6aa':'#263e45';c.fillRect(xx-1,y-64,3,3);}
+    line(c,x-26,y,x+26,y,'#879287',2);line(c,x-22,y+2,x+22,y+2,'#263c41',3);
+    if(ready){this.glow(x,y-29,40,this.tone.accent,.22);line(c,x,y-51,x,y-8,'#b4d4c7',2);if(!this.reduced){c.fillStyle='#dce0c2';c.fillRect(x-1,y-11-px((t*.8%1)*35),2,2);}}
     this.stats.drawCalls++;
   }
 
   private drawPilgrim(state:GameState,t:number){
-    const c=this.c,p=state.player,x=this.X(p.x),y=this.Y(p.y);
-    if(x < -40 || x > this.width+40)return;
-    const run=p.grounded&&Math.abs(p.vx)>.3&&!this.reduced;
-    const frame=p.deadTime>0?10:p.attackTime>0?(p.attackTime>.11?8:9):p.dashTime>0?7:!p.grounded?(p.vy>0?5:6):run?1+Math.floor(t*10)%4:0;
-    const size=Math.max(24,Math.round(this.unit*1.1*32/24));
-    c.fillStyle='#020606';c.fillRect(x-Math.round(this.unit*.4),y,Math.round(this.unit*.8),2);
+    const c=this.c,p=state.player,x=this.X(p.x),y=this.Y(p.y);if(x< -50||x>this.width+50)return;
+    let frame:number=PILGRIM_POSE.idle+(this.reduced?0:Math.floor(t*.65)%2);
+    if(p.deadTime>0)frame=PILGRIM_POSE.dead;
+    else if(p.dashTime>0)frame=PILGRIM_POSE.roll+Math.min(3,Math.floor((.19-p.dashTime)/.19*4));
+    else if(p.attackTime>0)frame=PILGRIM_POSE.strike+Math.min(2,Math.floor((.19-p.attackTime)/.19*3));
+    else if(p.invulnerability>.62)frame=PILGRIM_POSE.hurt;
+    else if(!p.grounded)frame=p.wall?PILGRIM_POSE.wall:p.vy>0?PILGRIM_POSE.rise:PILGRIM_POSE.fall;
+    else if(p.landingTime>0)frame=PILGRIM_POSE.land;
+    else if(Math.abs(p.vx)>.3)frame=PILGRIM_POSE.run+Math.floor(p.stride/.13)%8;
+    const scale=this.unit*1.18/47,sw=px(PILGRIM_CELL.width*scale),sh=px(PILGRIM_CELL.height*scale),dx=-px(24*scale),dy=-px(PILGRIM_CELL.foot*scale);
+    // Contact shadow follows the supporting plane, including air separation.
+    const below=state.stage.platforms.filter(q=>q.active!==false&&p.x>=q.x&&p.x<=q.x+q.w&&q.y<=p.y+.03).sort((a,b)=>b.y-a.y)[0];
+    if(below){const separation=p.y-below.y;c.save();c.globalAlpha=Math.max(.1,.55-separation*.18);c.fillStyle='#020a0e';const ww=px(this.unit*.58/(1+separation*.22));c.fillRect(x-ww/2,this.Y(below.y),ww,2);c.restore();}
+    this.glow(x,y-this.unit*.6,25,this.tone.accent,.055);
     c.save();c.translate(x,y);if(p.facing<0)c.scale(-1,1);
-    const feedback=p as typeof p & {invulnerability?:number;dashInvulnerability?:number};
-    if(feedback.invulnerability&&(this.reduced||Math.floor(t*18)%2))c.globalAlpha=this.reduced?.72:.42;
-    if(feedback.dashInvulnerability)this.glow(0,-size*.55,16,'#8bbacf',.16);
-    const dx=-Math.round(size/2),dy=-Math.round(size*29/32);
-    if(p.attackTime>0){c.save();c.globalAlpha=.62;for(let k=0;k<15;k++){const angle=-1.2+k*.14,r=size*.55;const sx=Math.round(Math.cos(angle)*r),sy=Math.round(-size*.46+Math.sin(angle)*r);c.fillStyle=k<5?'#e0d3ae':'#91b8b3';c.fillRect(sx,sy,2,2);}c.restore();}
-    if(p.dashTime>0){c.globalAlpha=.18;for(let k=1;k<3;k++)c.drawImage(this.sprites,7*32,0,32,32,dx-k*7,dy,size,size);c.globalAlpha=1;}
-    c.imageSmoothingEnabled=false;c.drawImage(this.sprites,frame*32,0,32,32,dx,dy,size,size);c.restore();this.stats.drawCalls++;
+    if(p.invulnerability>0&&(this.reduced||Math.floor(t*14)%2))c.globalAlpha=this.reduced?.8:.56;
+    if(p.dashInvulnerability>0)this.glow(0,-sh*.48,22,'#8bbacf',.2);
+    if(p.attackTime>0){c.save();c.globalAlpha=.60;const progress=1-p.attackTime/.19;for(let k=0;k<17;k++){const angle=-1.8+progress*1.8+k*.08,r=this.unit*.9;const sx=px(Math.cos(angle)*r),sy=px(-this.unit*.65+Math.sin(angle)*r);c.fillStyle=k<5?'#ead8b0':'#8dbbb7';c.fillRect(sx,sy,k<7?2:1,2);}c.restore();}
+    if(p.dashTime>0&&!this.reduced){c.save();c.globalAlpha=.12;for(let k=1;k<3;k++)c.drawImage(this.sprites,frame*48,0,48,64,dx-k*this.unit*.25,dy,sw,sh);c.restore();}
+    c.drawImage(this.sprites,frame*48,0,48,64,dx,dy,sw,sh);c.restore();
+    if(p.landingTime>.07&&!this.reduced){c.save();c.globalAlpha=p.landingTime/.12*.26;const radius=(.12-p.landingTime)*this.unit*2.7;for(let k=0;k<7;k++){c.fillStyle=this.tone.edge;c.fillRect(px(x+(k-3)*(2+radius)),y-px(Math.sin(k)*radius*.25),2,1);}c.restore();}
+    this.stats.drawCalls++;
+  }
+
+  private drawTitleScene(t:number){
+    const c=this.c,w=this.width,h=this.height,cx=px(w*.72),foot=px(h*.81),baseW=px(Math.min(w*.42,h*.52));
+    let plinth=this.structures.get('title');if(!plinth){plinth=structure(this.stage!.theme,baseW,px(h*.10),this.unit,351,false);this.structures.set('title',plinth);}c.drawImage(plinth,cx-baseW*.5,foot-2);
+    // A shattered orbit hangs behind the traveler, tied to the game's mask motif.
+    c.save();c.globalAlpha=.35;brokenOrbit(c,cx,foot-h*.27,h*.23,'#91a59b');c.restore();
+    for(let k=0;k<4;k++){const xx=cx-baseW*.42+k*baseW*.29;line(c,xx,foot-5,xx+3,foot-h*(.09+(k%2)*.05),'#405b58',2);}
+    this.glow(cx,foot-h*.26,h*.29,this.tone.accent,.085);
+    const scale=h*.58/64,sw=px(48*scale),sh=px(64*scale),frame=this.reduced?0:Math.floor(t*.65)%2;
+    c.fillStyle='#041016';c.fillRect(cx-sw*.18,foot,sw*.36,3);
+    c.drawImage(this.sprites,frame*48,0,48,64,cx-px(24*scale),foot-px(60*scale),sw,sh);
+    this.drawFlame(cx+baseW*.30,foot-12,t,1.2);
   }
 
   private drawEnemies(state:GameState,t:number){
@@ -790,7 +816,7 @@ export class GameRenderer {
       const current = String(state.stage.theme);
       if (!(current in TONES)) { this.theme = SCENES[this.stageIndex % 10]; this.tone = TONES[this.theme]; this.buildLayers(); }
     }
-    const menu = state.mode === 'menu';
+    const menu = state.mode === 'menu'||this.titlePresentation;
     const look = menu ? (this.width / this.height < .85 ? -1.0 : -2.3) : state.player.facing >= 0 ? 1.9 : -1.9;
     const nextX = state.player.x + look;
     const ground=state.stage.platforms.find(p=>p.h>1&&state.player.x>=p.x&&state.player.x<p.x+p.w)?.y??0;
@@ -799,28 +825,29 @@ export class GameRenderer {
     this.camX += (nextX - this.camX) * easing;
     this.camY += (nextY - this.camY) * easing;
     this.stats.drawCalls = 0; this.stats.triangles = 0;
+    this.fpsT += Math.max(0, dt); this.fpsN++;
+    if (this.fpsT > .55) { this.stats.fps = Math.round(this.fpsN / this.fpsT); this.fpsT = 0; this.fpsN = 0; }
     this.drawSky(elapsed);
     this.drawBackplate();
     this.drawLayers(0); this.drawFog(elapsed, 0);
     this.drawLayers(1); this.drawWorldTorches(elapsed);
     this.drawFog(elapsed, 1); this.drawLayers(2);
     this.drawWeather(elapsed);
+    if(menu){this.drawTitleScene(elapsed);this.drawForeground();this.finishFrame(elapsed);return;}
     const margin = this.width / this.unit + 3;
     for (const platform of state.stage.platforms) if (platform.x + platform.w > this.camX - margin && platform.x < this.camX + margin) this.drawPlatform(platform, elapsed);
     for (const hazard of state.stage.hazards) this.drawHazard(hazard, elapsed);
     for (const item of state.stage.pickups) this.drawPickup(item, elapsed);
     for (const cp of state.stage.checkpoints) this.drawCheckpoint(cp, elapsed);
-    this.drawExit(state.stage, elapsed);
+    this.drawExit(state, elapsed);
     this.drawEnemies(state, elapsed);
     this.drawPilgrim(state, elapsed);
     this.drawForeground();
     this.finishFrame(elapsed);
-    this.fpsT += Math.max(0, dt); this.fpsN++;
-    if (this.fpsT > .55) { this.stats.fps = Math.round(this.fpsN / this.fpsT); this.fpsT = 0; this.fpsN = 0; }
   }
 
   dispose() {
     if (this.media && this.onMotion) this.media.removeEventListener?.('change', this.onMotion);
-    this.layers = [];this.backplate=undefined;this.atlas.onload=null;
+    this.layers = [];this.structures.clear();this.backplate=undefined;this.atlas.onload=null;
   }
 }
