@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 const assets = (await readdir('dist/assets')).map(name=>`./assets/${name}`);
 const audio = (await readdir('dist/audio')).map(name=>`./audio/${name}`);
 const art = (await readdir('dist/art')).map(name=>`./art/${name}`);
-const files = ['./','./index.html','./icon.svg','./icon-192.png','./icon-512.png','./manifest.webmanifest',...assets,...audio,...art];
+const files = ['./','./index.html','./icon.svg','./icon-192.png','./icon-512.png','./manifest.webmanifest','./barlow-OFL.txt',...assets,...audio,...art];
 const digest=createHash('sha256');
 for(const file of files.filter(file=>file!=='./'))digest.update(file).update(await readFile(`dist/${file.slice(2)}`));
 const hash=digest.digest('hex').slice(0,12);

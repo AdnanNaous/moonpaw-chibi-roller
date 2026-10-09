@@ -10,10 +10,15 @@ describe('precise movement',()=>{
   const hop=peak(false),full=peak(true);expect(hop).toBeGreaterThan(.5);expect(hop).toBeLessThan(1.1);expect(full).toBeGreaterThan(1.9);expect(full-hop).toBeGreaterThan(1);
  });
  it('stops promptly and changes direction without a long skid',()=>{
-  const g=ready();run(g,.2,{move:1});expect(g.state.player.vx).toBeGreaterThan(6);const x=g.state.player.x;run(g,.1);expect(g.state.player.vx).toBe(0);expect(g.state.player.x-x).toBeLessThan(.32);run(g,.15,{move:-1});expect(g.state.player.vx).toBeLessThan(-6);
+  const g=ready();run(g,.2,{move:1});expect(g.state.player.vx).toBeCloseTo(5.2);const x=g.state.player.x;run(g,.1);expect(g.state.player.vx).toBe(0);expect(g.state.player.x-x).toBeLessThan(.25);run(g,.15,{move:-1});expect(g.state.player.vx).toBeCloseTo(-5.2);
+ });
+ it('builds speed over several frames and brakes a running reversal before accelerating back',()=>{
+  const g=ready(),p=g.state.player;run(g,.05,{move:1});expect(p.vx).toBeGreaterThan(1.8);expect(p.vx).toBeLessThan(2.1);
+  run(g,.15,{move:1});const x=p.x;run(g,.05,{move:-1});expect(p.vx).toBeGreaterThan(2);expect(p.vx).toBeLessThan(2.3);
+  run(g,.2,{move:-1});expect(p.vx).toBeCloseTo(-5.2);expect(p.x-x).toBeLessThan(.25);
  });
  it('locks a committed dodge direction while accepting later steering',()=>{
-  const g=ready();g.update(1/120,input({move:1,dashPressed:true}));const x=g.state.player.x;run(g,.10,{move:-1});expect(g.state.player.x).toBeGreaterThan(x+1);expect(g.state.player.facing).toBe(1);run(g,.25,{move:-1});expect(g.state.player.vx).toBeLessThan(0);expect(g.state.player.facing).toBe(-1);
+  const g=ready();g.update(1/120,input({move:1,dashPressed:true}));const x=g.state.player.x;run(g,.10,{move:-1});expect(g.state.player.x).toBeGreaterThan(x+.9);expect(g.state.player.facing).toBe(1);run(g,.25,{move:-1});expect(g.state.player.vx).toBeLessThan(0);expect(g.state.player.facing).toBe(-1);
  });
  it('holds a wall kick away from the wall long enough to gain separation',()=>{
   const g=ready(),p=g.state.player;p.grounded=false;p.wall=1;p.y=1;
@@ -22,5 +27,29 @@ describe('precise movement',()=>{
  it('buffers a jump just before landing and advances foot poses by distance',()=>{
   const g=ready(),p=g.state.player;p.grounded=false;p.y=.13;p.vy=-5;g.update(1/120,input({jump:true,jumpPressed:true}));run(g,.12,{jump:true});expect(p.y).toBeGreaterThan(.5);expect(p.vy).toBeGreaterThan(0);
   const walk=ready();run(walk,.3,{move:.5});const before=walk.state.player.stride;expect(before).toBeGreaterThan(.5);run(walk,.2);const stopped=walk.state.player.stride;run(walk,.2);expect(walk.state.player.stride).toBe(stopped);expect(stopped).toBeGreaterThan(before);
+ });
+ it('keeps a ground roll on its supporting surface with a bounded travel distance',()=>{
+  const g=ready(),p=g.state.player,x=p.x,y=p.y;
+  g.update(1/120,input({dashPressed:true}));
+  for(let i=0;i<27;i++){g.update(1/120,input());expect(p.y).toBe(y);expect(p.grounded).toBe(true);expect(p.vy).toBe(0);}
+  expect(p.x-x).toBeGreaterThan(2);expect(p.x-x).toBeLessThan(2.4);expect(p.dashTime).toBe(0);
+ });
+ it('preserves a useful apex but spends less time descending than rising',()=>{
+  const g=ready(),p=g.state.player;g.update(1/120,input({jump:true,jumpPressed:true}));
+  let peak=p.y,apex=0,landed=0;
+  for(let i=1;i<120;i++){
+   g.update(1/120,input({jump:true}));
+   if(p.y>peak){peak=p.y;apex=(i+1)/120;}
+   if(p.grounded){landed=(i+1)/120;break;}
+  }
+  expect(peak).toBeGreaterThan(2.05);expect(peak).toBeLessThan(2.2);
+  expect(apex).toBeGreaterThan(.35);expect(apex).toBeLessThan(.4);
+  expect(landed-apex).toBeGreaterThan(.29);expect(landed-apex).toBeLessThan(apex);
+  expect(p.landingTime).toBeGreaterThan(0);
+ });
+ it('continues falling during an air roll instead of suspending gravity',()=>{
+  const g=ready(),p=g.state.player;p.y=3;p.vy=-1;p.grounded=false;
+  g.update(1/120,input({dashPressed:true}));run(g,.1);
+  expect(p.dashTime).toBeGreaterThan(0);expect(p.y).toBeLessThan(2.7);expect(p.vy).toBeLessThan(-5);
  });
 });

@@ -3,10 +3,14 @@ import type { Boon, Enemy, GameState, InputFrame, Platform, Player, SaveData } f
 
 const WIDTH = .7;
 const HEIGHT = 1.1;
-const GRAVITY = 27;
-const RUN = 6.6;
-const JUMP = 10.8;
-const DASH = 15;
+const GRAVITY = 30;
+const FALL_GRAVITY = 40;
+const RUN = 5.2;
+const RUSH_RUN = 5.65;
+// Keep the vertical reach of the old jump while shortening its floating descent.
+const JUMP = 11.4;
+const DASH = 12;
+const DASH_DURATION = .22;
 const DASH_COST = 36;
 const ATTACK_COST = 16;
 const COYOTE = .105;
@@ -138,10 +142,10 @@ export class Game {
     }
     const dashCost = s.boon === 'rush' ? 26 : DASH_COST;
     if (input.dashPressed && p.dashReady && this.dashCooldown <= 0 && p.stamina >= dashCost) {
-      p.dashTime = .19; p.dashInvulnerability = .16; p.dashReady = false; p.stamina -= dashCost; this.staminaDelay = .48;
+      p.dashTime = DASH_DURATION; p.dashInvulnerability = .16; p.dashReady = false; p.stamina -= dashCost; this.staminaDelay = .48;
       this.dashDirection=p.facing;
       this.dashCooldown = .36;
-      p.vy = Math.max(p.vy, 1.1); this.emit('dash');
+      this.emit('dash');
     }
     const attackCost = s.boon === 'ward' ? 20 : ATTACK_COST;
     if (this.attackBuffer > 0 && this.attackCooldown <= 0 && p.stamina >= attackCost && p.dashTime <= 0) {
@@ -152,17 +156,22 @@ export class Game {
     }
     if (p.dashTime > 0) {
       p.dashTime = Math.max(0, p.dashTime - dt);
-      p.vx = p.dashTime>0?this.dashDirection * DASH:move*(s.boon==='rush'?7.15:RUN);
+      const progress = 1 - p.dashTime / DASH_DURATION;
+      const rollSpeed = DASH * (.62 + .38 * Math.sin(progress * Math.PI));
+      p.vx = p.dashTime > 0 ? this.dashDirection * rollSpeed : move * (s.boon === 'rush' ? RUSH_RUN : RUN);
     } else {
-      const target = move * (s.boon === 'rush' ? 7.15 : RUN) + (p.grounded ? 0 : s.stage.wind);
+      const target = move * (s.boon === 'rush' ? RUSH_RUN : RUN) + (p.grounded ? 0 : s.stage.wind);
       const braking=Math.abs(move)<.12||move*p.vx<0;
-      const accel = p.grounded ? braking?78:60 : braking?38:42;
+      const accel = p.grounded ? braking ? 60 : 38 : braking ? 22 : 28;
       if(this.wallKick<=0)p.vx += clamp(target - p.vx, -accel * dt, accel * dt);
-      p.vy -= GRAVITY * dt;
-      // One intentional release cut gives a predictable short hop rather than
-      // continuously changing gravity after a finger leaves the button.
-      if (!input.jump && !this.jumpCut && this.jumpAge>=.055 && p.vy>0){p.vy*=.48;this.jumpCut=true;}
     }
+
+    // Rolling changes horizontal motion only: ground contact and gravity remain real.
+    // A heavier descent removes the long hover at the apex without sacrificing reach.
+    p.vy -= (p.vy > 0 ? GRAVITY : FALL_GRAVITY) * dt;
+    // One intentional release cut gives a predictable short hop rather than
+    // continuously changing gravity after a finger leaves the button.
+    if (!input.jump && !this.jumpCut && this.jumpAge >= .055 && p.vy > 0) { p.vy *= .48; this.jumpCut = true; }
 
     const oldOn = this.groundedOn;
     const carry = s.stage.platforms.find(q => q.id === oldOn && q.active !== false);
@@ -420,7 +429,10 @@ export class Game {
       this.emit('arena_cleared');
     } else if (s.bossHealth > 0 && s.stage.enemies.some(e => e.arena === arena.id && e.kind === 'regent')) {
       const boss = s.stage.enemies.find(e => e.kind === 'regent')!;
-      s.warning = boss.phase === 'recovery' ? 'Regent exposed — strike' : boss.phase === 'windup' ? `${boss.attackKind.toUpperCase()} — read the amber tell` : `Regent · phase ${boss.bossPhase}`;
+      const tell = boss.attackKind === 'slam' ? 'LOW SHOCKWAVE — jump' :
+        boss.attackKind === 'slash' && boss.attackY > boss.y + .5 ? 'HIGH CLEAVE — roll through or retreat' :
+          `${boss.attackKind.toUpperCase()} — read the amber tell`;
+      s.warning = boss.phase === 'recovery' ? 'Regent exposed — strike' : boss.phase === 'windup' ? tell : `Regent · phase ${boss.bossPhase}`;
     } else s.warning = 'Hunt sealed · clear the sentries';
   }
 
@@ -434,12 +446,16 @@ export class Game {
     e.attackCount++;
     e.attackKind = e.kind === 'marksman' ? 'shot' : e.kind === 'skirmisher' ? 'lunge' : e.kind === 'regent' ?
       (e.bossPhase >= 2 && e.attackCount % 3 === 0 ? 'slam' : e.attackCount % 2 ? 'slash' : 'lunge') : 'slash';
+    // Later phases answer habitual jumps with a high blade. Its raised,
+    // committed tell makes rolling through or retreating the safe response;
+    // the low shockwave still rewards jumping instead.
+    const highCleave = e.kind === 'regent' && e.bossPhase >= 2 && e.attackKind === 'slash';
     e.facing = p.x >= e.x + e.w / 2 ? 1 : -1;
     e.phase = 'windup'; e.timer = this.windupDuration(e); e.telegraph = .05;
     e.attackW = e.attackKind === 'shot' ? Math.max(2, Math.abs(p.x - e.x) + 1.1) : e.attackKind === 'slam' ? 5.5 : e.attackKind === 'lunge' ? 3.65 : 2.35;
-    e.attackH = e.attackKind === 'shot' ? .36 : e.attackKind === 'slam' ? .6 : 1.45;
+    e.attackH = e.attackKind === 'shot' ? .36 : e.attackKind === 'slam' ? .6 : highCleave ? 2.25 : 1.45;
     e.attackX = e.attackKind === 'slam' ? e.x + e.w / 2 - e.attackW / 2 : e.facing > 0 ? e.x + e.w / 2 : e.x + e.w / 2 - e.attackW;
-    e.attackY = e.attackKind === 'shot' ? p.y + .46 : e.y;
+    e.attackY = e.attackKind === 'shot' ? p.y + .46 : e.y + (highCleave ? .8 : 0);
   }
 
   private hurt(damage: number, origin: number, combat: boolean) {

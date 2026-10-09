@@ -7,9 +7,61 @@ interface Plan {
   id: string; name: string; subtitle: string; theme: Theme; mechanic: Mechanic; accent: string; description: string;
   floors: Floor[]; shelves: Shelf[]; threats: Threat[]; relics: number[]; bells: number[]; wind?: number; notes: [string, string];
 }
+interface SealTrial {
+  height: number;
+  entry: [number, number, Platform['kind']?];
+  crown: [number, number, Platform['kind']?];
+  widths?: [number, number];
+  hazard?: [number, Hazard['kind'], number, number];
+}
+// Each pair is a different journey to a name: a low foothold, a committed
+// second jump, then a landing on the seal's perch. Offsets are relative to the
+// seal, so the authored routes remain inside their original combat-free bays.
+const sealTrials: Record<Theme, [SealTrial, SealTrial]> = {
+  crypt: [
+    { height: 4.15, entry: [-3.3, 1.4], crown: [-1.25, 3], hazard: [-4.5, 'gate', 0, 1.7] },
+    { height: 4.15, entry: [-3.5, 1.5, 'crumble'], crown: [-1.25, 3], hazard: [3.5, 'gate', 0, .6] },
+  ],
+  foundry: [
+    { height: 4.1, entry: [-3, 1.35, 'conveyor'], crown: [-1.3, 2.95, 'moving'], widths: [3.2, 2.2] },
+    { height: 4.1, entry: [-3.5, 1.4, 'moving'], crown: [-1.2, 3, 'conveyor'], widths: [2.2, 3.2] },
+  ],
+  flood: [
+    { height: 4.2, entry: [-3, 1.5], crown: [-1.25, 3.05, 'moving'], widths: [2.8, 3.1] },
+    { height: 4.2, entry: [-3.5, 1.5, 'moving'], crown: [-1.25, 3.05], widths: [2.2, 3] },
+  ],
+  archives: [
+    { height: 4.15, entry: [-3, 1.4, 'memory'], crown: [-1.2, 3, 'memory'], widths: [2.2, 2.1] },
+    { height: 4.15, entry: [-3.4, 1.4], crown: [-1.2, 3, 'memory'] },
+  ],
+  belfry: [
+    { height: 4.65, entry: [-2.9, 2.2], crown: [-1.2, 3.45, 'moving'] },
+    { height: 4.5, entry: [-3, 2.1, 'moving'], crown: [-1.2, 3.3] },
+  ],
+  orchard: [
+    { height: 4.2, entry: [-3.4, 1.5, 'crumble'], crown: [-1.2, 3.05], widths: [2.1, 2.6] },
+    { height: 4.2, entry: [-3.4, 1.5], crown: [-1.2, 3.05, 'crumble'], widths: [2.6, 2] },
+  ],
+  prison: [
+    { height: 4.1, entry: [-3.5, 1.4], crown: [-1.2, 3], hazard: [2.2, 'arrow', 2.7, .55] },
+    { height: 4.1, entry: [-3.3, 1.4, 'crumble'], crown: [-1.2, 3], hazard: [2.6, 'arrow', 2.7, 1.9] },
+  ],
+  choir: [
+    { height: 4.25, entry: [-3.2, 1.5], crown: [-1.2, 3.1], hazard: [3, 'blade', 2.65, 2] },
+    { height: 4.25, entry: [-3.4, 1.5, 'moving'], crown: [-1.2, 3.1], hazard: [3.5, 'blade', 2.65, .5] },
+  ],
+  abyss: [
+    { height: 4.15, entry: [-3.2, 1.4], crown: [-1.2, 3, 'memory'] },
+    { height: 4.15, entry: [-3.3, 1.4, 'memory'], crown: [-1.2, 3], hazard: [3.5, 'darkness', 2.8, 1.4] },
+  ],
+  throne: [
+    { height: 4.2, entry: [-3, 1.5, 'crumble'], crown: [-1.2, 3.05, 'moving'] },
+    { height: 4.2, entry: [-3.3, 1.5, 'conveyor'], crown: [-1.2, 3.05, 'crumble'] },
+  ],
+};
 const plans: Plan[] = [
   { id: 'sentence-of-stone', name: 'Sentence of Stone', subtitle: 'The Crypt Court', theme: 'crypt', mechanic: 'execution', accent: '#d9e1a5',
-    description: 'The headsman counts in red. Cross each threshold after the blade falls.',
+    description: 'Wait out the execution bell, then climb the fractured witness stands. Both names hang above the court floor.',
     floors: [[0,15],[18.2,13],[35,12],[50.6,13],[67.3,14],[85,12],[101.7,13],[118.5,15]],
     shelves: [[11,1.7,3],[28,1.7,3],[43,1.9,3,'crumble'],[61,2.2,3],[79,1.8,3],[95,2.0,3,'moving'],[113,2.1,3]],
     threats: [[11,'gate'],[25,'spikes'],[42,'gate',0,1.4],[58,'crusher'],[77,'gate',0,2.7],[91,'spikes'],[109,'gate',0,.8],[124,'crusher',0,1.5]],
@@ -21,13 +73,13 @@ const plans: Plan[] = [
     threats: [[23,'crusher'],[43,'saw'],[58,'crusher',0,1.7],[75,'spikes'],[94,'crusher',0,3.1],[111,'saw'],[128,'crusher',0,.8]],
     relics: [38,107], bells: [36,87], notes: ['SHIFT LOG', 'They sealed the furnace door from the outside. Something kept feeding it.'] },
   { id: 'drowned-procession', name: 'Drowned Procession', subtitle: 'The Flooded Cistern', theme: 'flood', mechanic: 'flood', accent: '#67d4d9',
-    description: 'The black tide follows the funeral bells. Climb when it rises; sprint when it drains.',
+    description: 'The tide takes the lower passage. Catch the lifting sluice shelves and claim the names above the waterline.',
     floors: [[0,14],[18,11],[33.3,12],[49,11],[64.5,12],[81,11],[96.5,12],[113,12],[129,14]],
     shelves: [[12,1.7,4],[22,2.2,4,'moving'],[36,2.1,4],[53,2.5,4,'crumble'],[68,2.2,4,'moving'],[84,2.7,4],[100,2.3,4,'crumble'],[117,2.4,4],[133,2.5,4]],
     threats: [[13,'tide'],[39,'tide',0,1.6],[70,'tide',0,2.9],[100,'tide',0,.9],[126,'tide',0,2.1],[55,'spikes']],
     relics: [37,99], bells: [34,82,114], notes: ['WATERLINE', 'At low tide, the names scratched into the floor appear again.'] },
   { id: 'palimpsest', name: 'Palimpsest', subtitle: 'The Vanishing Archive', theme: 'archives', mechanic: 'memory', accent: '#bba6ed',
-    description: 'Ink bridges fade after each bell stroke. Remember the pattern and commit.',
+    description: 'The name alcoves fade one shelf at a time. Learn their order, climb during the opening, and leave before the ink dissolves.',
     floors: [[0,13],[19,11],[35,10],[50,11],[65,13],[82,11],[97,12],[113,12],[129,15]],
     shelves: [[12,1.6,5,'memory'],[19,2.2,4,'memory'],[27,2.8,4,'memory'],[35,2.1,5,'memory'],[43,2.7,5,'memory'],[51,2.0,5,'memory'],[59,2.8,4,'memory'],[68,2.2,5,'memory'],[76,2.7,5,'memory'],[84,2.1,5,'memory'],[92,2.8,5,'memory'],[101,2.1,5,'memory'],[109,2.8,4,'memory'],[117,2.1,5,'memory'],[125,2.8,5,'memory'],[135,2.4,4,'crumble']],
     threats: [[24,'darkness'],[44,'spikes'],[70,'darkness',0,2],[104,'spikes'],[123,'darkness',0,3]],
@@ -39,13 +91,13 @@ const plans: Plan[] = [
     threats: [[21,'blade'],[36,'spikes'],[52,'blade',0,1.4],[77,'blade',0,2.4],[95,'spikes'],[111,'blade',0,.5]],
     relics: [32,91], bells: [43,88], wind: 1.4, notes: ['BELL ROPE', 'Three strokes: the wind turns. One stroke: hold fast.'] },
   { id: 'the-hungry-orchard', name: 'The Hungry Orchard', subtitle: 'Orchard of Teeth', theme: 'orchard', mechanic: 'stalker', accent: '#d58490',
-    description: 'The root things stalk a straight line. Turn and strike, then use the opening.',
+    description: 'Rotten roots collapse under your weight. Commit to the next branch, recover the names, and drop into the waiting hunt.',
     floors: [[0,17],[20,14],[37,15],[55,14],[72,13],[88,14],[105,13],[121,16]],
     shelves: [[13,1.6,4,'crumble'],[25,2.2,4],[42,1.8,4,'moving'],[59,2.1,4,'crumble'],[75,1.9,4],[92,2.2,4,'moving'],[109,1.7,4,'crumble'],[126,2.1,4]],
     threats: [[25,'hunter'],[44,'spikes'],[60,'hunter',0,1.2],[80,'hunter',0,2.2],[95,'spikes'],[112,'hunter',0,.7],[129,'hunter',0,1.9]],
     relics: [43,109], bells: [38,89], notes: ['ROOT WARNING', 'The sentries learned to climb. A ledge buys time; it does not end the hunt.'] },
   { id: 'arrow-vigil', name: 'Arrow Vigil', subtitle: 'The Prison Ramparts', theme: 'prison', mechanic: 'arrows', accent: '#9ad5b7',
-    description: 'Red aim lines mark each shot. Run beneath the high volleys and jump the low.',
+    description: 'Climb the exposed watchwalks for the names. High volleys punish the upper route; the floor offers cover but cannot open the door.',
     floors: [[0,16],[19,13],[35.5,13],[52,12],[68,12],[84,12],[100,13],[117,15]],
     shelves: [[11,2,4],[26,2.5,4,'crumble'],[39,2,4],[55,2.7,4,'moving'],[72,2.2,4],[88,2.8,4,'crumble'],[103,2.1,4],[120,2.5,4]],
     threats: [[20,'arrow'],[38,'arrow',1.35,1.1],[54,'arrow',0,2.1],[72,'arrow',1.35,.3],[89,'arrow',0,1.6],[106,'arrow',1.35,2.8],[122,'arrow',0,.8]],
@@ -79,8 +131,37 @@ function threat([x,kind,y=0,phase=0]:Threat,i:number):Hazard {
 }
 function pickups(plan:Plan):Pickup[] {
   const gems=plan.floors.slice(1,-1).map(([x,w],i)=>({id:`gem-${i}`,x:x+w*.5,y:1.1,collected:false,kind:'gem' as const}));
-  return [...gems,...plan.relics.map((x,i)=>({id:`seal-${i}`,x,y:1.0,collected:false,kind:'relic' as const})),
+  return [...gems,...plan.relics.map((x,i)=>({id:`seal-${i}`,x,y:sealTrials[plan.theme][i].height,collected:false,kind:'relic' as const})),
     {id:'record',x:plan.bells[0]+2,y:1.2,collected:false,kind:'record',text:plan.notes[1],secret:true}];
+}
+function traversal(plan: Plan): { platforms: Platform[]; hazards: Hazard[] } {
+  const platforms = plan.shelves.map(shelf).filter(p => !plan.relics.some(x => p.x < x + 2 && p.x + p.w > x - 4));
+  const hazards: Hazard[] = [];
+  sealTrials[plan.theme].forEach((trial, i) => {
+    const seal = plan.relics[i];
+    const platform = (part: 'entry' | 'crown', spec: Shelf) => ({ ...shelf(spec, 0), id: `trial-${i}-${part}` });
+    const [ex, ey, ek = 'solid'] = trial.entry;
+    const [cx, cy, ck = 'solid'] = trial.crown;
+    const [ew, cw] = trial.widths ?? [2.5, 2.5];
+    platforms.push(platform('entry', [seal + ex, ey, ew, ek, ek === 'conveyor' ? -1 : i * 1.4]),
+      platform('crown', [seal + cx, cy, cw, ck, ck === 'conveyor' ? 1 : i * 1.4]));
+    if (trial.hazard) {
+      const [x, kind, y, phase] = trial.hazard;
+      hazards.push({ ...threat([seal + x, kind, y, phase], 0), id: `trial-${i}-threat` });
+    }
+  });
+  // Long chasms have a real landing for the heavier jump, rather than hidden extra reach.
+  plan.floors.forEach(([x, w, y = 0], i) => {
+    const next = plan.floors[i + 1];
+    if (!next) return;
+    const gap = next[0] - x - w;
+    if (gap < 4.5) return;
+    const kind: Platform['kind'] = plan.theme === 'archives' || plan.theme === 'abyss' ? 'memory' :
+      plan.theme === 'foundry' || plan.theme === 'belfry' ? 'moving' : plan.theme === 'orchard' ? 'crumble' : 'solid';
+    const bx = x + w + gap * .5 - 1.05, by = Math.max(y, next[2] ?? 0) + .7;
+    platforms.push({ ...shelf([bx, by, 2.1, kind, i * .9], 0), id: `crossing-${i}` });
+  });
+  return { platforms, hazards };
 }
 export const STAGE_INFO=plans.map(({id,name,subtitle,theme,accent,description,floors})=>({id,name,subtitle,theme,accent,description,length:Math.max(...floors.map(([x,w])=>x+w))}));
 function encounters(plan: Plan, index: number): { arenas: Arena[]; enemies: Enemy[] } {
@@ -111,10 +192,11 @@ export function createStage(index:number):Stage {
   const p=plans[chapter];
   const length=Math.max(...p.floors.map(([x,w])=>x+w));
   const combat = encounters(p, chapter);
+  const route = traversal(p);
   return {id:p.id,name:p.name,subtitle:p.subtitle,theme:p.theme,mechanic:p.mechanic,accent:p.accent,description:p.description,length,
-    spawn:{x:2,y:0},exit:{x:length-2,y:0},platforms:[...p.floors.map(floor),...p.shelves.map(shelf)],
+    spawn:{x:2,y:0},exit:{x:length-2,y:0},platforms:[...p.floors.map(floor),...route.platforms],
     // Dedicated arenas let attack tells stay readable; the chapter's traps remain on the traversal routes.
-    hazards:p.threats.map(threat).filter(h => h.kind !== 'hunter' && h.kind !== 'warden' && !combat.arenas.some(a => h.x >= a.x && h.x < a.x + a.w)),pickups:pickups(p),checkpoints:p.bells.map((x,i)=>({
+    hazards:[...p.threats.map(threat),...route.hazards].filter(h => h.kind !== 'hunter' && h.kind !== 'warden' && !combat.arenas.some(a => h.x >= a.x && h.x < a.x + a.w)),pickups:pickups(p),checkpoints:p.bells.map((x,i)=>({
       id:`bell-${i}`,x,y:p.floors.find(([fx,w])=>x>=fx&&x<fx+w)?.[2]??0,active:false,
     })),
     wind:p.wind??0,records:p.notes,...combat};

@@ -117,7 +117,7 @@ describe('challenge and progress', () => {
     // Exit probing has entered the final sealed arena. Test seal collection in a fresh run.
     s.arenaActive = null;
     for (const seal of s.stage.pickups.filter(p => p.kind === 'relic')) {
-      s.player.x = seal.x; s.player.y = 0;
+      s.player.x = seal.x; s.player.y = seal.y - .7;
       game.update(1 / 120, frame());
     }
     expect(s.relicsCollected).toBe(2);
@@ -165,14 +165,20 @@ function journey(game: Game) {
     const missing = stage.pickups.filter(g => g.kind === 'relic' && !g.collected);
     const enemy = stage.enemies.filter(e => e.arena === s.arenaActive && e.health > 0).sort((a,b)=>Math.abs(a.x-p.x)-Math.abs(b.x-p.x))[0];
     const bossPending = enemy?.kind === 'regent';
-    const goal = enemy ? enemy.x + enemy.w / 2 - Math.sign(enemy.x + enemy.w / 2 - p.x || 1) * 1.05 : missing[0]?.x ?? stage.exit.x;
+    const trialIndex = missing[0]?.id.split('-').at(-1);
+    const entry=stage.platforms.find(q=>q.id===`trial-${trialIndex}-entry`),crown=stage.platforms.find(q=>q.id===`trial-${trialIndex}-crown`);
+    const trialTarget=!enemy&&entry&&crown&&missing[0]&&Math.abs(p.x-missing[0].x)<7?(p.y<entry.y-.15?entry:crown):undefined;
+    const goal = enemy ? enemy.x + enemy.w / 2 - Math.sign(enemy.x + enemy.w / 2 - p.x || 1) * 1.05 : trialTarget?trialTarget.x+trialTarget.w*.5:missing[0]?.x ?? stage.exit.x;
     let move = Math.abs(goal - p.x) < .28 ? 0 : Math.sign(goal - p.x);
     if (missing.length && Math.abs(goal - p.x) < 1.1 && p.y > .7) move = Math.sign(goal - p.x) * .45;
+    if(trialTarget)move=Math.abs(goal-p.x)<.08?0:Math.max(-1,Math.min(1,(goal-p.x)*2.5));
     const floor = stage.platforms.filter(q => q.h > 1);
     const ground = floor.find(q => p.x >= q.x && p.x < q.x + q.w) ?? floor.filter(q=>q.x<=p.x).at(-1);
     const next = floor.find(q => q.x > (ground?.x ?? p.x));
     const edge = ground ? ground.x + ground.w - p.x : Infinity;
     const gap = ground && next ? next.x - ground.x - ground.w : 0;
+    const crossing = ground && next ? stage.platforms.find(q => q.id.startsWith('crossing-') &&
+      q.x >= ground.x + ground.w && q.x + q.w <= next.x) : undefined;
     const support = stage.platforms.find(q => q.active !== false && Math.abs(p.y - q.y) < .08 && p.x >= q.x && p.x < q.x + q.w);
     const ledgeEdge = support && support.h < 1 ? support.x + support.w - p.x : Infinity;
     const ahead = stage.hazards.filter(h => h.kind !== 'warden' && h.x + h.w >= p.x && h.x - p.x < 2.6)
@@ -180,26 +186,45 @@ function journey(game: Game) {
     const dx = ahead ? ahead.x - p.x : Infinity;
     if (move > 0 && ahead && ['gate', 'crusher', 'tide', 'darkness'].includes(ahead.kind) &&
       dx > .5 && dx < 2 && (ahead.active || (ahead.telegraph ?? 0) > 0)) move = 0;
-    if (!enemy && p.grounded && gap >= 3.5 && edge < 1.5 && p.stamina < 55) move = 0;
-    let wantJump = move > 0 && p.grounded && ((gap > .8 && edge < .78) || ledgeEdge < .6);
+    if (!enemy && p.grounded && gap >= 3.0 && edge < 1.5 && p.stamina < 55) move = 0;
+    // Read a fading bridge before committing, then aim the air roll at its
+    // near edge rather than waiting until the far floor is already too low.
+    if (!enemy && p.grounded && support?.h && support.h > 1 && crossing?.kind === 'memory' && edge < 3 &&
+      (s.time + crossing.x * .17) % 3.6 > 1.35) move = 0;
+    let wantJump = move > 0 && p.grounded && ((gap > .8 && edge < .45) || ledgeEdge < .6);
     if (move > 0 && p.grounded && ahead && dx > .2 && dx < 1.75 &&
       ['spikes', 'saw', 'blade', 'hunter', 'arrow'].includes(ahead.kind)) wantJump = true;
     if (move > 0 && p.grounded && ahead?.kind === 'tide' && dx < 2 && ahead.active) wantJump = true;
-    const jump = wantJump || p.vy > .1;
+    if(trialTarget&&p.grounded&&trialTarget.active!==false&&trialTarget.y-p.y>.15&&Math.abs(goal-p.x)<1.9)wantJump=true;
+    let jump = wantJump || p.vy > .1;
+    const landingX = crossing && p.x < crossing.x + crossing.w - .4 ? crossing.x : next?.x;
     let dashPressed = move > 0 && p.dashReady && !p.grounded && p.vy < 2 &&
-      !!next && next.x - p.x > 1.3 && next.x - p.x < 4.5 && (gap >= 3.5 || p.y < .4);
+      landingX !== undefined && landingX - p.x > 1.3 && landingX - p.x < 4.5 && (gap >= 3.0 || p.y < .4);
     let attackPressed = false;
     if (enemy) {
       const enemyDx = enemy.x + enemy.w / 2 - p.x;
       if (Math.abs(enemyDx) < 1.65) {
         move = Math.sign(enemyDx) * .18;
-        attackPressed = s.time - lastStrike > .41 && (!bossPending || enemy.phase === 'recovery' && enemy.timer > .18);
+        attackPressed = s.time - lastStrike > .41 && (!bossPending ||
+          enemy.phase === 'recovery' && enemy.timer > .18 && p.stamina >= 36);
       }
       const incoming = stage.enemies.find(e => e.arena === s.arenaActive && e.health > 0 &&
         (e.phase === 'attack' || e.phase === 'windup' && e.timer < .03) &&
         p.x + .3 > e.attackX && p.x - .3 < e.attackX + e.attackW && p.y + 1 > e.attackY && p.y < e.attackY + e.attackH);
-      if (incoming && p.dashReady && p.stamina >= (s.boon === 'rush' ? 26 : 36)) {
+      if (incoming && !bossPending && p.dashReady && p.stamina >= (s.boon === 'rush' ? 26 : 36)) {
         move = Math.sign(enemyDx) || 1; dashPressed = true; attackPressed = false;
+      }
+      if (bossPending) {
+        // Jump the low tell, but answer the raised blade with a late roll
+        // through its locked aim. Preserve enough stamina to do both rather
+        // than spending every opening on attacks.
+        const highCleave = enemy.attackKind === 'slash' && enemy.attackY > enemy.y + .5;
+        dashPressed = false;
+        if (enemy.phase === 'windup' && enemy.timer < .3 && p.grounded && !highCleave) jump = true;
+        if (highCleave && incoming && p.dashReady && p.stamina >= 36) {
+          move = Math.sign(enemyDx) || 1; dashPressed = true; jump = false;
+        }
+        if (enemy.phase !== 'recovery') attackPressed = false;
       }
       if (p.y > enemy.y + enemy.h && support && support.h < 1) {
         dropMove = p.x - support.x < support.x + support.w - p.x ? -1 : 1;
@@ -222,8 +247,7 @@ function journey(game: Game) {
 }
 
 describe('campaign traversal with player inputs', () => {
-  it('collects both seals and completes all ten chapters, including the final fight', () => {
-    for (let index = 0; index < STAGE_INFO.length; index++) {
+  it.each(STAGE_INFO.map((_,i)=>i))('collects both seals and clears every encounter in chapter %i', (index) => {
       const game = unlocked(); game.start(index);
       const result = journey(game);
       expect(game.state.mode, `chapter ${index + 1}: x=${result.farthest.toFixed(1)}, seals=${result.relicPeak}, deaths=${game.state.deaths}: ${result.deaths.join(' | ')} ${result.debug}`)
@@ -232,6 +256,5 @@ describe('campaign traversal with player inputs', () => {
       expect(game.state.stage.arenas.every(a=>a.cleared)).toBe(true);
       expect(game.state.kills).toBeGreaterThanOrEqual(5);
       expect(game.state.deaths).toBeLessThan(24);
-    }
   }, 120_000);
 });

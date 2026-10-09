@@ -50,6 +50,12 @@ export class GameRenderer {
   private readonly enemySprites=createEnemySprites();
   private structures=new Map<string,HTMLCanvasElement>();
   private titlePresentation=false;
+  private previousPlayer?:{x:number;y:number;stride:number};
+  private previousEnemies=new Map<string,{x:number;y:number}>();
+  private previousPlatforms=new Map<string,{x:number;y:number}>();
+  private renderAlpha=1;
+  private enemyRim?:HTMLCanvasElement;
+  private pilgrimLight?:HTMLCanvasElement;
   private foreground?:HTMLCanvasElement;
   private readonly atlas=new Image();
   private backplate?:HTMLCanvasElement;
@@ -111,6 +117,7 @@ export class GameRenderer {
   }
 
   setStage(stage: Stage) {
+    this.previousPlayer=undefined;this.previousEnemies.clear();this.previousPlatforms.clear();
     this.stage = stage;
     const name = String(stage.theme);
     this.theme = name in TONES ? name : SCENES[this.stageIndex % 10];
@@ -138,6 +145,44 @@ export class GameRenderer {
   }
 
   setPresentation(value:'title'|'game'){this.titlePresentation=value==='title';}
+
+  /** Snapshot the last fixed step; render interpolation never changes collisions. */
+  capturePhysics(state:GameState){
+    const p=state.player;this.previousPlayer={x:p.x,y:p.y,stride:p.stride};
+    for(const e of state.stage.enemies){const old=this.previousEnemies.get(e.id)??{x:e.x,y:e.y};old.x=e.x;old.y=e.y;this.previousEnemies.set(e.id,old);}
+    for(const q of state.stage.platforms){const old=this.previousPlatforms.get(q.id)??{x:q.x,y:q.y};old.x=q.x;old.y=q.y;this.previousPlatforms.set(q.id,old);}
+  }
+
+  private blend(old:number|undefined,current:number){return old===undefined||Math.abs(current-old)>2?current:old+(current-old)*this.renderAlpha;}
+
+  private lampFloor(x:number){return this.stage?.platforms.find(q=>q.h>1&&x>q.x+.5&&x<q.x+q.w-.5);}
+
+  private nearestLamp(x:number,y:number){
+    let distance=Infinity,lampX=x-3;
+    const consider=(tx:number,ty:number)=>{const d=Math.hypot(tx-x,ty-y);if(d<distance){distance=d;lampX=tx;}};
+    for(let n=-1;n<=1;n++){const tx=Math.round((x-3)/9)*9+3+n*9;const floor=this.lampFloor(tx);if(floor)consider(tx,floor.y+.9);}
+    for(const cp of this.stage?.checkpoints??[])if(cp.active)consider(cp.x+.2,cp.y+.5);
+    return {distance,x:lampX};
+  }
+
+  private lightStrength(x:number,y:number){return Math.max(0,.24*(1-this.nearestLamp(x,y).distance/5));}
+
+  private drawCastShadows(state:GameState){
+    const c=this.c;
+    const bodies=[state.player,...state.stage.enemies.filter(e=>e.health>0).map(e=>({
+      x:this.blend(this.previousEnemies.get(e.id)?.x,e.x)+e.w*.5,
+      y:this.blend(this.previousEnemies.get(e.id)?.y,e.y),
+    }))];
+    c.save();c.fillStyle='#010710';
+    for(const b of bodies){
+      const floor=state.stage.platforms.filter(q=>q.active!==false&&b.x>=q.x&&b.x<=q.x+q.w&&q.y<=b.y+.05).sort((a,b)=>b.y-a.y)[0];if(!floor)continue;
+      const x=this.X(b.x),y=this.Y(floor.y),lamp=this.nearestLamp(b.x,b.y).x,away=Math.sign(b.x-lamp)||1;
+      const spread=this.unit*(.65+Math.min(3,Math.abs(b.x-lamp))*.22),lift=b.y-floor.y;
+      c.globalAlpha=Math.max(.08,.35-lift*.09);
+      polygon(c,[x-this.unit*.2,y,x+this.unit*.2,y,x+away*spread+this.unit*.12,y+4,x+away*spread-this.unit*.15,y+4],'#010710');
+    }
+    c.restore();
+  }
 
   setQuality(quality: Quality) { this.quality = quality; this.resize(); }
   setReducedMotion(value:boolean) { this.userReduced=value;this.reduced=value||Boolean(this.media?.matches); }
@@ -493,7 +538,8 @@ export class GameRenderer {
 
   private drawPlatform(p: Stage['platforms'][number], t: number) {
     if(p.active===false)return;
-    const c=this.c,x=this.X(p.x),y=this.Y(p.y),w=Math.max(4,px(p.w*this.unit)),h=Math.max(4,px(p.h*this.unit));
+    const previous=this.previousPlatforms.get(p.id);
+    const c=this.c,x=this.X(this.blend(previous?.x,p.x)),y=this.Y(this.blend(previous?.y,p.y)),w=Math.max(4,px(p.w*this.unit)),h=Math.max(4,px(p.h*this.unit));
     if(x>this.width+25||x+w< -25)return;
     const key=p.id;let art=this.structures.get(key);
     if(!art){art=structure(this.stage!.theme,w,h,this.unit,p.x,p.h<1);this.structures.set(key,art);}
@@ -670,12 +716,12 @@ export class GameRenderer {
     const c=this.c,p=state.player,x=this.X(p.x),y=this.Y(p.y);if(x< -50||x>this.width+50)return;
     let frame:number=PILGRIM_POSE.idle+(this.reduced?0:Math.floor(t*.65)%2);
     if(p.deadTime>0)frame=PILGRIM_POSE.dead;
-    else if(p.dashTime>0)frame=PILGRIM_POSE.roll+Math.min(3,Math.floor((.19-p.dashTime)/.19*4));
+    else if(p.dashTime>0)frame=PILGRIM_POSE.roll+Math.max(0,Math.min(3,Math.floor((.22-p.dashTime)/.22*4)));
     else if(p.attackTime>0)frame=PILGRIM_POSE.strike+Math.min(2,Math.floor((.19-p.attackTime)/.19*3));
     else if(p.invulnerability>.62)frame=PILGRIM_POSE.hurt;
     else if(!p.grounded)frame=p.wall?PILGRIM_POSE.wall:p.vy>0?PILGRIM_POSE.rise:PILGRIM_POSE.fall;
     else if(p.landingTime>0)frame=PILGRIM_POSE.land;
-    else if(Math.abs(p.vx)>.3)frame=PILGRIM_POSE.run+Math.floor(p.stride/.13)%8;
+    else if(Math.abs(p.vx)>.3)frame=PILGRIM_POSE.run+Math.floor(p.stride/2.7*16)%16;
     const scale=this.unit*1.18/47,sw=px(PILGRIM_CELL.width*scale),sh=px(PILGRIM_CELL.height*scale),dx=-px(24*scale),dy=-px(PILGRIM_CELL.foot*scale);
     // Contact shadow follows the supporting plane, including air separation.
     const below=state.stage.platforms.filter(q=>q.active!==false&&p.x>=q.x&&p.x<=q.x+q.w&&q.y<=p.y+.03).sort((a,b)=>b.y-a.y)[0];
@@ -686,7 +732,9 @@ export class GameRenderer {
     if(p.dashInvulnerability>0)this.glow(0,-sh*.48,22,'#8bbacf',.2);
     if(p.attackTime>0){c.save();c.globalAlpha=.60;const progress=1-p.attackTime/.19;for(let k=0;k<17;k++){const angle=-1.8+progress*1.8+k*.08,r=this.unit*.9;const sx=px(Math.cos(angle)*r),sy=px(-this.unit*.65+Math.sin(angle)*r);c.fillStyle=k<5?'#ead8b0':'#8dbbb7';c.fillRect(sx,sy,k<7?2:1,2);}c.restore();}
     if(p.dashTime>0&&!this.reduced){c.save();c.globalAlpha=.12;for(let k=1;k<3;k++)c.drawImage(this.sprites,frame*48,0,48,64,dx-k*this.unit*.25,dy,sw,sh);c.restore();}
-    c.drawImage(this.sprites,frame*48,0,48,64,dx,dy,sw,sh);c.restore();
+    c.drawImage(this.sprites,frame*48,0,48,64,dx,dy,sw,sh);
+    if(!this.pilgrimLight){this.pilgrimLight=document.createElement('canvas');this.pilgrimLight.width=this.sprites.width;this.pilgrimLight.height=this.sprites.height;const light=this.pilgrimLight.getContext('2d')!;light.drawImage(this.sprites,0,0);light.globalCompositeOperation='source-in';light.fillStyle='#ee9c55';light.fillRect(0,0,this.sprites.width,this.sprites.height);}
+    c.save();c.globalCompositeOperation='screen';c.globalAlpha=this.lightStrength(p.x,p.y);c.drawImage(this.pilgrimLight,frame*48,0,48,64,dx,dy,sw,sh);c.restore();c.restore();
     if(p.landingTime>.07&&!this.reduced){c.save();c.globalAlpha=p.landingTime/.12*.26;const radius=(.12-p.landingTime)*this.unit*2.7;for(let k=0;k<7;k++){c.fillStyle=this.tone.edge;c.fillRect(px(x+(k-3)*(2+radius)),y-px(Math.sin(k)*radius*.25),2,1);}c.restore();}
     this.stats.drawCalls++;
   }
@@ -698,19 +746,20 @@ export class GameRenderer {
     c.save();c.globalAlpha=.35;brokenOrbit(c,cx,foot-h*.27,h*.23,'#91a59b');c.restore();
     for(let k=0;k<4;k++){const xx=cx-baseW*.42+k*baseW*.29;line(c,xx,foot-5,xx+3,foot-h*(.09+(k%2)*.05),'#405b58',2);}
     this.glow(cx,foot-h*.26,h*.29,this.tone.accent,.085);
-    const scale=h*.58/64,sw=px(48*scale),sh=px(64*scale),frame=this.reduced?0:Math.floor(t*.65)%2;
+    const scale=h*.46/64,sw=px(48*scale),sh=px(64*scale),frame=this.reduced?0:Math.floor(t*.65)%2;
     c.fillStyle='#041016';c.fillRect(cx-sw*.18,foot,sw*.36,3);
     c.drawImage(this.sprites,frame*48,0,48,64,cx-px(24*scale),foot-px(60*scale),sw,sh);
     this.drawFlame(cx+baseW*.30,foot-12,t,1.2);
   }
 
   private drawEnemies(state:GameState,t:number){
-    type EnemyArt={x:number;y:number;w:number;h:number;kind:string;health:number;maxHealth:number;phase:string;telegraph:number;facing:number;attackX:number;attackY:number;attackW:number;attackH:number};
+    type EnemyArt={id:string;x:number;y:number;w:number;h:number;kind:string;health:number;maxHealth:number;phase:string;telegraph:number;facing:number;attackX:number;attackY:number;attackW:number;attackH:number};
     const enemies=(state.stage as unknown as {enemies?:EnemyArt[]}).enemies??[];
     const c=this.c;
     for(const e of enemies){
       if(e.health<=0||e.phase==='dead')continue;
-      const x=this.X(e.x+e.w*.5),y=this.Y(e.y);if(x< -90||x>this.width+90)continue;
+      const previous=this.previousEnemies.get(e.id);
+      const x=this.X(this.blend(previous?.x,e.x)+e.w*.5),y=this.Y(this.blend(previous?.y,e.y));if(x< -90||x>this.width+90)continue;
       const kind=e.kind==='regent'?3:e.kind==='marksman'?2:e.kind==='skirmisher'?1:0;
       const pose=e.phase==='windup'?1:e.phase==='attack'?2:e.phase==='stagger'?3:0;
       const sizeY=Math.max(34,px(e.h*this.unit*64/48)),sizeX=px(sizeY*.75);
@@ -725,7 +774,12 @@ export class GameRenderer {
       c.fillStyle='#030a0e';c.fillRect(x-sizeX*.3,y,sizeX*.6,2);
       c.save();c.translate(x,y);if(e.facing<0)c.scale(-1,1);
       const tilt=e.phase==='attack'?2:0;
+      if(!this.enemyRim){this.enemyRim=document.createElement('canvas');this.enemyRim.width=this.enemySprites.width;this.enemyRim.height=this.enemySprites.height;const rim=this.enemyRim.getContext('2d')!;rim.drawImage(this.enemySprites,0,0);rim.globalCompositeOperation='source-in';rim.fillStyle='#d5b8a4';rim.fillRect(0,0,this.enemyRim.width,this.enemyRim.height);}
+      c.save();c.globalAlpha=e.phase==='windup'?.75:.46;
+      for(const [rx,ry] of [[-1,0],[1,0],[0,-1]])c.drawImage(this.enemyRim,kind*48,pose*64,48,64,-px(sizeX/2)+tilt+rx,-px(sizeY*60/64)+ry,sizeX,sizeY);
+      c.restore();
       c.drawImage(this.enemySprites,kind*48,pose*64,48,64,-px(sizeX/2)+tilt,-px(sizeY*60/64),sizeX,sizeY);
+      c.save();c.globalCompositeOperation='screen';c.globalAlpha=this.lightStrength(e.x,e.y);c.drawImage(this.enemyRim,kind*48,pose*64,48,64,-px(sizeX/2)+tilt,-px(sizeY*60/64),sizeX,sizeY);c.restore();
       c.restore();
       if(e.phase==='stagger'){this.glow(x,y-sizeY*.5,20,'#d9c7a5',.16);for(let k=0;k<7;k++){const a=k*Math.PI*2/7; c.fillStyle=k%2?'#d7bc91':'#7cc2c4';c.fillRect(px(x+Math.cos(a)*14),px(y-sizeY*.5+Math.sin(a)*12),2,1);}}
       if(e.health<e.maxHealth||e.phase==='windup'){
@@ -766,7 +820,8 @@ export class GameRenderer {
     const c = this.c;
     const first = Math.floor((this.camX - this.width / this.unit) / 9) * 9;
     for (let wx = first; wx < this.camX + this.width / this.unit + 10; wx += 9) {
-      const x = this.X(wx + 3), y = this.Y(0);
+      const floor=this.lampFloor(wx+3);if(!floor)continue;
+      const x = this.X(wx + 3), y = this.Y(floor.y);
       if (x < -20 || x > this.width + 20) continue;
       c.fillStyle = '#0b171c'; c.fillRect(x - 2, y - 27, 4, 22);
       polygon(c,[x-5,y-31,x-3,y-36,x+3,y-36,x+5,y-31,x+3,y-28,x-3,y-28],'#4e625c');
@@ -809,7 +864,7 @@ export class GameRenderer {
     void t;
   }
 
-  render(state: GameState, _alpha: number, elapsed: number, dt: number) {
+  render(state: GameState, alpha: number, elapsed: number, dt: number) {
     if (!this.stage || this.stage.id !== state.stage.id || this.stage !== state.stage) this.setStage(state.stage);
     if (state.stageIndex !== this.stageIndex) {
       this.stageIndex = state.stageIndex;
@@ -817,11 +872,14 @@ export class GameRenderer {
       if (!(current in TONES)) { this.theme = SCENES[this.stageIndex % 10]; this.tone = TONES[this.theme]; this.buildLayers(); }
     }
     const menu = state.mode === 'menu'||this.titlePresentation;
-    const look = menu ? (this.width / this.height < .85 ? -1.0 : -2.3) : state.player.facing >= 0 ? 1.9 : -1.9;
-    const nextX = state.player.x + look;
+    this.renderAlpha=state.mode==='playing'?clamp(alpha,0,1):1;
+    const previous=this.previousPlayer,p=state.player;
+    const view={...state,player:{...p,x:this.blend(previous?.x,p.x),y:this.blend(previous?.y,p.y),stride:this.blend(previous?.stride,p.stride)}};
+    const look = menu ? (this.width / this.height < .85 ? -1.0 : -2.3) : clamp(p.vx/5.2,-1,1)*1.05;
+    const nextX = view.player.x + look;
     const ground=state.stage.platforms.find(p=>p.h>1&&state.player.x>=p.x&&state.player.x<p.x+p.w)?.y??0;
-    const nextY = ground+2.55+clamp(state.player.y-ground,0,3)*.35;
-    const easing = menu || this.reduced ? 1 : 1 - Math.exp(-Math.max(0, dt) * 5.6);
+    const nextY = ground+2.55+clamp(view.player.y-ground-2.2,0,4)*.45;
+    const easing = menu || this.reduced ? 1 : 1 - Math.exp(-Math.max(0, dt) * 8);
     this.camX += (nextX - this.camX) * easing;
     this.camY += (nextY - this.camY) * easing;
     this.stats.drawCalls = 0; this.stats.triangles = 0;
@@ -830,18 +888,20 @@ export class GameRenderer {
     this.drawSky(elapsed);
     this.drawBackplate();
     this.drawLayers(0); this.drawFog(elapsed, 0);
-    this.drawLayers(1); this.drawWorldTorches(elapsed);
+    this.drawLayers(1);
     this.drawFog(elapsed, 1); this.drawLayers(2);
     this.drawWeather(elapsed);
     if(menu){this.drawTitleScene(elapsed);this.drawForeground();this.finishFrame(elapsed);return;}
     const margin = this.width / this.unit + 3;
     for (const platform of state.stage.platforms) if (platform.x + platform.w > this.camX - margin && platform.x < this.camX + margin) this.drawPlatform(platform, elapsed);
+    this.drawWorldTorches(elapsed);
     for (const hazard of state.stage.hazards) this.drawHazard(hazard, elapsed);
     for (const item of state.stage.pickups) this.drawPickup(item, elapsed);
     for (const cp of state.stage.checkpoints) this.drawCheckpoint(cp, elapsed);
     this.drawExit(state, elapsed);
+    this.drawCastShadows(view);
     this.drawEnemies(state, elapsed);
-    this.drawPilgrim(state, elapsed);
+    this.drawPilgrim(view, elapsed);
     this.drawForeground();
     this.finishFrame(elapsed);
   }

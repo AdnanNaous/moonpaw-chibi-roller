@@ -1,6 +1,6 @@
 /** Original articulated pixel drawing; all poses share a planted ankle origin. */
-export const PILGRIM_CELL={width:48,height:64,foot:60,frames:23} as const;
-export const PILGRIM_POSE={idle:0,run:2,rise:10,fall:11,roll:12,strike:16,land:19,hurt:20,dead:21,wall:22} as const;
+export const PILGRIM_CELL={width:48,height:64,foot:60,frames:31} as const;
+export const PILGRIM_POSE={idle:0,run:2,rise:18,fall:19,roll:20,strike:24,land:27,hurt:28,dead:29,wall:30} as const;
 const HERO={ink:'#07111b',shadow:'#172831',cloth:'#3a5157',fold:'#6f8580',edge:'#a4b1a0',bone:'#d4d0b4',light:'#f0e6c5',mask:'#a7ad9c',rust:'#9f685c',red:'#533c42',steel:'#8ea8aa'};
 type Point=[number,number];
 /** Scan-converted polygons keep every source cell opaque: no softened diagonal edges. */
@@ -20,12 +20,12 @@ export function createPilgrimSprites(){
  const joint=(a:Point,b:Point,d:Point,col:string)=>{segment(a,b,5,HERO.ink);segment(b,d,4,HERO.ink);segment(a,b,3,col);segment(b,d,2,HERO.steel);rect(d[0]-2,d[1]-1,6,2,HERO.ink);rect(d[0],d[1]-1,4,1,HERO.edge);};
  for(let frame=0;frame<PILGRIM_CELL.frames;frame++){
   c.clearRect(0,0,pose.width,pose.height);c.save();c.translate(16,16);
-  const running=frame>=2&&frame<10,phase=running?(frame-2)/8*Math.PI*2:0;
-  const roll=frame>=12&&frame<16,strike=frame>=16&&frame<19,land=frame===19,air=frame===10||frame===11,wall=frame===22,dead=frame===21;
-  const bob=running?Math.round(Math.abs(Math.sin(phase))*2):frame===1?1:0;
+  const running=frame>=PILGRIM_POSE.run&&frame<PILGRIM_POSE.rise,phase=running?(frame-PILGRIM_POSE.run)/16*Math.PI*2:0;
+  const roll=frame>=PILGRIM_POSE.roll&&frame<PILGRIM_POSE.strike,strike=frame>=PILGRIM_POSE.strike&&frame<PILGRIM_POSE.land,land=frame===PILGRIM_POSE.land,air=frame===PILGRIM_POSE.rise||frame===PILGRIM_POSE.fall,wall=frame===PILGRIM_POSE.wall,dead=frame===PILGRIM_POSE.dead;
+  const bob=running?Math.round(Math.abs(Math.sin(phase))):frame===1?1:0;
   const lean=running?2:strike?3:wall?-3:0,drop=land?7:0,hip:Point=[23+lean,43+drop-bob];
   if(dead){c.translate(24,54);c.rotate(-Math.PI/2);c.scale(.60,.60);c.translate(-24,-37);}
-  if(roll){c.translate(25,46);c.rotate((frame-12)*Math.PI*.5);c.scale(.67,.67);c.translate(-25,-44);}
+  if(roll){c.translate(25,46);c.rotate((frame-PILGRIM_POSE.roll)*Math.PI*.5);c.scale(.67,.67);c.translate(-25,-44);}
   const poly=(pts:Point[],col:string)=>cellPolygon(c,pts,col);
   // Split cloak: long back panel is pulled by motion, short front panel leaves knees readable.
   const flutter=running?Math.round(Math.sin(phase+.9)*3):air?-3:0;
@@ -34,11 +34,19 @@ export function createPilgrimSprites(){
   segment([18+lean,34+drop-bob],[14+flutter,47-bob],1,HERO.fold);
   segment([22+lean,36+drop-bob],[19+flutter,48-bob],1,HERO.shadow);
   rect(11+flutter,51-bob,3,1,HERO.edge);
-  // Eight genuine limb poses have alternating planted / tucked feet rather than sprite translation.
-  let backK:Point=[22+Math.sin(phase)*5,51+drop*.3-bob],backF:Point=[20+Math.sin(phase)*9,59-Math.max(0,-Math.cos(phase))*5];
-  let frontK:Point=[25-Math.sin(phase)*5,51+drop*.3-bob],frontF:Point=[27-Math.sin(phase)*9,59-Math.max(0,Math.cos(phase))*5];
+  // Contact sweeps backwards ~7 source cells per frame, matching the body's
+  // advance at a 2.7-unit gait. A short stance and tucked swing give a running
+  // flight phase instead of sliding a planted foot forwards along the ground.
+  const feet:Point[]=[[36,59],[29,59],[22,59],[15,59],[12,56],[11,50],[12,47],[16,46],[20,47],[25,48],[29,50],[32,51],[35,52],[37,53],[38,55],[39,57]];
+  const leg=(pose:number,offset:number):[Point,Point]=>{
+   const f=feet[pose],foot:Point=[f[0]+offset,f[1]];
+   const knee:Point=[(hip[0]+foot[0])*.5+(pose>3&&pose<11?3:0),pose<4?51-bob:48-bob];
+   return [knee,foot];
+  };
+  let [frontK,frontF]=leg(Math.max(0,frame-PILGRIM_POSE.run)%16,0);
+  let [backK,backF]=leg((Math.max(0,frame-PILGRIM_POSE.run)+8)%16,-4);
   if(!running){backK=[21,51+drop*.35];backF=[18,59];frontK=[26,51+drop*.35];frontF=[29,59];}
-  if(air){backK=[19,46];backF=[16,51];frontK=[28,47];frontF=frame===10?[32,53]:[28,58];}
+  if(air){backK=[19,46];backF=[16,51];frontK=[28,47];frontF=frame===PILGRIM_POSE.rise?[32,53]:[28,58];}
   if(roll){backK=[20,48];backF=[28,51];frontK=[31,44];frontF=[30,50];}
   if(strike){backK=[20,51];backF=[15,59];frontK=[31,51];frontF=[34,59];}
   if(wall){backK=[22,46];backF=[16,51];frontK=[31,45];frontF=[33,51];}
@@ -65,18 +73,18 @@ export function createPilgrimSprites(){
   segment([hx-7,hy+8],[hx-14+(running?-3:0),hy+10+flutter],1,HERO.rust);
   let elbow:Point=[31+lean,39+drop-bob],hand:Point=[31+lean,44+drop-bob];
   if(running){elbow=[30+Math.sin(phase)*3,38-bob];hand=[29+Math.sin(phase)*5,42-bob];}
-  if(strike){elbow=frame===16?[29,29]:frame===17?[34,34]:[33,40];hand=frame===16?[33,23]:frame===17?[40,31]:[36,46];}
+  if(strike){elbow=frame===PILGRIM_POSE.strike?[29,29]:frame===PILGRIM_POSE.strike+1?[34,34]:[33,40];hand=frame===PILGRIM_POSE.strike?[33,23]:frame===PILGRIM_POSE.strike+1?[40,31]:[36,46];}
   if(wall){elbow=[31,32];hand=[35,26];}
   if(roll){elbow=[31,35];hand=[30,39];}
   segment([28+lean,33+drop-bob],elbow,5,HERO.ink);segment(elbow,hand,4,HERO.ink);
   segment([28+lean,33+drop-bob],elbow,3,HERO.cloth);segment(elbow,hand,2,HERO.fold);rect(hand[0]-1,hand[1]-1,3,3,HERO.bone);
   // A hooked single-edge blade. Idle rests point-down; strikes show anticipation, arc and follow-through.
-  if(!roll&&!wall){const tip:Point=strike?(frame===16?[28,5]:frame===17?[47,22]:[45,55]):[hand[0]+2,58];
+  if(!roll&&!wall){const tip:Point=strike?(frame===PILGRIM_POSE.strike?[28,5]:frame===PILGRIM_POSE.strike+1?[47,22]:[45,55]):[hand[0]+2,58];
    segment(hand,tip,3,HERO.ink);segment(hand,tip,1,HERO.bone);
    const mid:Point=[(hand[0]+tip[0])*.5+1,(hand[1]+tip[1])*.5];segment(mid,[tip[0]+1,tip[1]-2],1,HERO.light);
    rect(hand[0]-1,hand[1]+2,2,2,HERO.rust);
   }
-  if(frame===20){rect(hx-5,hy,11,1,HERO.light);}
+  if(frame===PILGRIM_POSE.hurt){rect(hx-5,hy,11,1,HERO.light);}
   c.restore();
   if(roll||dead){
    // Normalize the actual raster contact, including quarter-turns, before packing the atlas.

@@ -134,7 +134,7 @@ export class AudioDirector {
     }
     if(previous&&previous.stage===state.stage.id&&moving&&!this.muted){
       const surface:Surface=state.stage.theme==='flood'?'water':['foundry','prison','choir'].includes(state.stage.theme)?'iron':state.stage.theme==='archives'?'wood':'stone';
-      if(p.grounded&&p.dashTime<=0&&Math.abs(p.vx)>.5&&Math.floor(p.stride/.52)>Math.floor(previous.stride/.52))this.foley?.play(surface,.60+(this.cueSerial++%3)*.06,0,.95+(this.cueSerial%3)*.035);
+      if(p.grounded&&p.dashTime<=0&&Math.abs(p.vx)>.5&&Math.floor(p.stride/1.35)>Math.floor(previous.stride/1.35))this.foley?.play(surface,.60+(this.cueSerial++%3)*.06,0,.95+(this.cueSerial%3)*.035);
       if(p.grounded&&!previous.grounded&&previous.fall< -3)this.foley?.play('land',Math.min(1.1,.24+Math.abs(previous.fall)*.055),0,.9);
       if(p.dashTime>0&&!previous.dash)this.foley?.play('cloth',.95);
     }

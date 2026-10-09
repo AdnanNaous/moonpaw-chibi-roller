@@ -1,3 +1,6 @@
+import '@fontsource/barlow/latin-400.css';
+import '@fontsource/barlow/latin-500.css';
+import '@fontsource/barlow-condensed/latin-600.css';
 import './style.css';
 import {Game} from './core';
 import {STAGE_INFO} from './levels';
@@ -54,7 +57,7 @@ function stageStart(index:number){
 }
 function begin(){intro=-1;game.resume();reset();sync();canvas.focus();notice(game.state.stage.description,6500);}
 function title(){intro=-1;ending=undefined;game.menu();audio.enterTitle(game.save.unlocked-1);page='title';renderer.setStage(game.state.stage);reset();sync();}
-function credits(){return `<p>Created & directed by <strong>Adnan Naous</strong>.</p><p>Pixel artwork, story, original musical arrangements and engineering developed with Codex. Prototype explored with Grok.</p><p class="quiet">Movement, combat pressure and layered fantasy worlds informed the direction. No artwork, characters or soundtrack from the referenced games was copied.</p><p class="quiet">Instrument samples: GeneralUser GS, S. Christian Collins. Used for original game arrangements under its music-production license. <a href="https://github.com/mrbumpy409/GeneralUser-GS" target="_blank" rel="noopener noreferrer">Instrument source ↗</a></p><nav class="links">${CREATOR_LINKS.map(l=>`<a href="${l.url}" target="_blank" rel="noopener noreferrer">${escape(l.label)} ↗</a>`).join('')}</nav><p class="quiet">For the ones who were never named.</p>`;}
+function credits(){return `<p>Created & directed by <strong>Adnan Naous</strong>.</p><p>Pixel artwork, story, original musical arrangements and engineering developed with Codex. Prototype explored with Grok.</p><p class="quiet">Movement, combat pressure and layered fantasy worlds informed the direction. No artwork, characters or soundtrack from the referenced games was copied.</p><p class="quiet">Instrument samples: GeneralUser GS, S. Christian Collins. Used for original game arrangements under its music-production license. <a href="https://github.com/mrbumpy409/GeneralUser-GS" target="_blank" rel="noopener noreferrer">Instrument source ↗</a></p><p class="quiet">Typography: Barlow and Barlow Condensed by the Barlow Project Authors, bundled under the SIL Open Font License. <a href="./barlow-OFL.txt" target="_blank" rel="noopener noreferrer">Font license ↗</a></p><nav class="links">${CREATOR_LINKS.map(l=>`<a href="${l.url}" target="_blank" rel="noopener noreferrer">${escape(l.label)} ↗</a>`).join('')}</nav><p class="quiet">For the ones who were never named.</p>`;}
 function journal(){
   const records=STAGE_INFO.flatMap((stage,i)=>{
     if(!discovered.has(`${i}:intro`))return [];
@@ -170,7 +173,7 @@ function frame(now:number){
   pending={...sample,jumpPressed:pending.jumpPressed||sample.jumpPressed,dashPressed:pending.dashPressed||sample.dashPressed,attackPressed:pending.attackPressed||sample.attackPressed,pausePressed:pending.pausePressed||sample.pausePressed};
   if(game.state.mode==='playing'){
     accumulator+=dt;let steps=0;
-    while(accumulator>=1/120&&steps++<10){game.update(1/120,pending);pending.jumpPressed=pending.dashPressed=pending.pausePressed=false;pending.attackPressed=false;accumulator-=1/120;}
+    while(accumulator>=1/120&&steps++<10){renderer.capturePhysics(game.state);game.update(1/120,pending);pending.jumpPressed=pending.dashPressed=pending.pausePressed=false;pending.attackPressed=false;accumulator-=1/120;}
     if(game.state.player.deadTime===0){
       for(let n=0;n<2;n++)if(game.state.player.x/game.state.stage.length>(n===0?.33:.70)&&!discovered.has(`${game.state.stageIndex}:${n}`)){
         const note=FIELD_NOTES[game.state.stageIndex][n];discovered.add(`${game.state.stageIndex}:${n}`);persistJournal();notice(`${note.speaker} — ${note.text}`,10000);

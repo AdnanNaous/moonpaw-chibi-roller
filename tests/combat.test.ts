@@ -122,4 +122,47 @@ describe('combat encounters', () => {
     game.update(1 / 120, frame()); expect(e.bossPhase).toBe(2); expect(e.attackKind).toBe('slam');
     e.health = 3; game.update(1 / 120, frame()); expect(e.bossPhase).toBe(3);
   });
+
+  it.each([7, 3])('counters repeated jumping with a rollable high cleave at %i Regent health', (health) => {
+    const highCleave = () => {
+      const game = new Game({ unlocked: 10, best: {} }); game.start(9);
+      const enemy = game.state.stage.enemies.find(e => e.kind === 'regent')!;
+      const player = game.state.player;
+      enemy.health = health; enemy.attackCount = 0; enemy.phase = 'idle'; enemy.timer = 0;
+      player.x = enemy.x + enemy.w / 2 + 1.05; player.y = enemy.y; player.facing = -1;
+      game.update(1 / 120, frame());
+      expect(enemy.attackKind).toBe('slash');
+      expect(enemy.attackY).toBeCloseTo(enemy.y + .8);
+      expect(game.state.warning).toMatch(/HIGH CLEAVE/);
+      return { game, enemy, player };
+    };
+    const jumper = highCleave();
+    advance(jumper.game, jumper.enemy.timer - .3);
+    jumper.game.update(1 / 120, frame({ jump: true, jumpPressed: true }));
+    advance(jumper.game, .48, frame({ jump: true }));
+    expect(jumper.player.health).toBe(4);
+    const roller = highCleave();
+    advance(roller.game, roller.enemy.timer - .02);
+    roller.game.update(1 / 120, frame({ move: -1, dashPressed: true }));
+    advance(roller.game, .23, frame({ move: -1 }));
+    expect(roller.player.health).toBe(5);
+    expect(roller.player.stamina).toBeLessThan(65);
+    expect(roller.player.x).toBeLessThan(roller.enemy.attackX);
+  });
+
+  it('leaves the contrasting low shockwave avoidable by the same timed jump', () => {
+    const game = new Game({ unlocked: 10, best: {} }); game.start(9);
+    const enemy = game.state.stage.enemies.find(e => e.kind === 'regent')!;
+    const player = game.state.player;
+    enemy.health = 7; enemy.attackCount = 2; enemy.phase = 'idle'; enemy.timer = 0;
+    player.x = enemy.x + enemy.w / 2 + 1.05; player.y = enemy.y;
+    game.update(1 / 120, frame());
+    expect(enemy.attackKind).toBe('slam');
+    expect(game.state.warning).toMatch(/LOW SHOCKWAVE/);
+    advance(game, enemy.timer - .3);
+    game.update(1 / 120, frame({ jump: true, jumpPressed: true }));
+    advance(game, .48, frame({ jump: true }));
+    expect(player.health).toBe(5);
+    expect(player.stamina).toBe(100);
+  });
 });
