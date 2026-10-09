@@ -1,5 +1,6 @@
 import {createPilgrimSprites, createEnemySprites, PILGRIM_CELL, PILGRIM_POSE} from './pixel-art';
 import {structure} from './structures';
+import {packPilgrimAtlas,PAINTED_PILGRIM_CELL} from './pilgrim-atlas';
 import {brokenOrbit, paintMoth, architectureDetail} from './world-art';
 import type { GameState, Quality, Stage } from './types';
 
@@ -46,7 +47,10 @@ function ring(c: G, x: number, y: number, r: number, color: string, width = 2) {
 export class GameRenderer {
   readonly stats = { fps: 0, drawCalls: 0, triangles: 0, pixelScale:1, width:0, height:0 };
   private readonly canvas: HTMLCanvasElement;
-  private readonly sprites=createPilgrimSprites();
+  private sprites=document.createElement('canvas');
+  private heroCell:{width:number;height:number;foot:number;body:number;frames:number}=PAINTED_PILGRIM_CELL;
+  private readonly heroImage=new Image();
+  private heroReady=false;
   private readonly enemySprites=createEnemySprites();
   private structures=new Map<string,HTMLCanvasElement>();
   private titlePresentation=false;
@@ -93,6 +97,15 @@ export class GameRenderer {
     if (!context) throw new Error('Offscreen Canvas 2D is unavailable');
     this.c = context;
     this.noise = this.makeNoise();
+    const fallback=()=>{this.sprites=createPilgrimSprites();this.heroCell={...PILGRIM_CELL,body:47};this.pilgrimLight=undefined;this.heroReady=true;};
+    // Keep the player visible if a run starts before the first download finishes.
+    fallback();
+    this.heroImage.onload=()=>{
+      try{this.sprites=packPilgrimAtlas(this.heroImage);this.heroCell=PAINTED_PILGRIM_CELL;this.pilgrimLight=undefined;this.heroReady=true;}
+      catch(error){console.warn('The painted pilgrim could not be loaded; using the local fallback.',error);fallback();}
+    };
+    this.heroImage.onerror=fallback;
+    this.heroImage.src=`${import.meta.env.BASE_URL}art/pilgrim-v6.png`;
     this.atlas.onload=()=>this.buildBackplate();
     this.atlas.src=`${import.meta.env.BASE_URL}art/threshold-environments-v3.png`;
     if (typeof matchMedia === 'function') {
@@ -713,7 +726,7 @@ export class GameRenderer {
   }
 
   private drawPilgrim(state:GameState,t:number){
-    const c=this.c,p=state.player,x=this.X(p.x),y=this.Y(p.y);if(x< -50||x>this.width+50)return;
+    const c=this.c,p=state.player,x=this.X(p.x),y=this.Y(p.y);if(!this.heroReady||x< -100||x>this.width+100)return;
     let frame:number=PILGRIM_POSE.idle+(this.reduced?0:Math.floor(t*.65)%2);
     if(p.deadTime>0)frame=PILGRIM_POSE.dead;
     else if(p.dashTime>0)frame=PILGRIM_POSE.roll+Math.max(0,Math.min(3,Math.floor((.22-p.dashTime)/.22*4)));
@@ -722,7 +735,7 @@ export class GameRenderer {
     else if(!p.grounded)frame=p.wall?PILGRIM_POSE.wall:p.vy>0?PILGRIM_POSE.rise:PILGRIM_POSE.fall;
     else if(p.landingTime>0)frame=PILGRIM_POSE.land;
     else if(Math.abs(p.vx)>.3)frame=PILGRIM_POSE.run+Math.floor(p.stride/2.7*16)%16;
-    const scale=this.unit*1.18/47,sw=px(PILGRIM_CELL.width*scale),sh=px(PILGRIM_CELL.height*scale),dx=-px(24*scale),dy=-px(PILGRIM_CELL.foot*scale);
+    const cell=this.heroCell,scale=this.unit*1.28/cell.body,sw=px(cell.width*scale),sh=px(cell.height*scale),dx=-px(cell.width*.5*scale),dy=-px(cell.foot*scale);
     // Contact shadow follows the supporting plane, including air separation.
     const below=state.stage.platforms.filter(q=>q.active!==false&&p.x>=q.x&&p.x<=q.x+q.w&&q.y<=p.y+.03).sort((a,b)=>b.y-a.y)[0];
     if(below){const separation=p.y-below.y;c.save();c.globalAlpha=Math.max(.1,.55-separation*.18);c.fillStyle='#020a0e';const ww=px(this.unit*.58/(1+separation*.22));c.fillRect(x-ww/2,this.Y(below.y),ww,2);c.restore();}
@@ -730,26 +743,21 @@ export class GameRenderer {
     c.save();c.translate(x,y);if(p.facing<0)c.scale(-1,1);
     if(p.invulnerability>0&&(this.reduced||Math.floor(t*14)%2))c.globalAlpha=this.reduced?.8:.56;
     if(p.dashInvulnerability>0)this.glow(0,-sh*.48,22,'#8bbacf',.2);
-    if(p.attackTime>0){c.save();c.globalAlpha=.60;const progress=1-p.attackTime/.19;for(let k=0;k<17;k++){const angle=-1.8+progress*1.8+k*.08,r=this.unit*.9;const sx=px(Math.cos(angle)*r),sy=px(-this.unit*.65+Math.sin(angle)*r);c.fillStyle=k<5?'#ead8b0':'#8dbbb7';c.fillRect(sx,sy,k<7?2:1,2);}c.restore();}
-    if(p.dashTime>0&&!this.reduced){c.save();c.globalAlpha=.12;for(let k=1;k<3;k++)c.drawImage(this.sprites,frame*48,0,48,64,dx-k*this.unit*.25,dy,sw,sh);c.restore();}
-    c.drawImage(this.sprites,frame*48,0,48,64,dx,dy,sw,sh);
+    if(p.attackTime>0){c.save();const progress=1-p.attackTime/.19;c.globalAlpha=Math.sin(progress*Math.PI)*.65;for(let claw=0;claw<3;claw++)for(let k=0;k<12;k++){const angle=-1.5+progress*.6+k*.075,r=this.unit*(.75+claw*.1);c.fillStyle=k<4?'#ead8b0':'#8dbbb7';c.fillRect(px(Math.cos(angle)*r),px(-this.unit*.42+Math.sin(angle)*r),k<5?2:1,1);}c.restore();}
+    if(p.dashTime>0&&!this.reduced){c.save();c.globalAlpha=.12;for(let k=1;k<3;k++)c.drawImage(this.sprites,frame*cell.width,0,cell.width,cell.height,dx-k*this.unit*.25,dy,sw,sh);c.restore();}
+    c.drawImage(this.sprites,frame*cell.width,0,cell.width,cell.height,dx,dy,sw,sh);
     if(!this.pilgrimLight){this.pilgrimLight=document.createElement('canvas');this.pilgrimLight.width=this.sprites.width;this.pilgrimLight.height=this.sprites.height;const light=this.pilgrimLight.getContext('2d')!;light.drawImage(this.sprites,0,0);light.globalCompositeOperation='source-in';light.fillStyle='#ee9c55';light.fillRect(0,0,this.sprites.width,this.sprites.height);}
-    c.save();c.globalCompositeOperation='screen';c.globalAlpha=this.lightStrength(p.x,p.y);c.drawImage(this.pilgrimLight,frame*48,0,48,64,dx,dy,sw,sh);c.restore();c.restore();
+    c.save();c.globalCompositeOperation='screen';c.globalAlpha=this.lightStrength(p.x,p.y);c.drawImage(this.pilgrimLight,frame*cell.width,0,cell.width,cell.height,dx,dy,sw,sh);c.restore();c.restore();
     if(p.landingTime>.07&&!this.reduced){c.save();c.globalAlpha=p.landingTime/.12*.26;const radius=(.12-p.landingTime)*this.unit*2.7;for(let k=0;k<7;k++){c.fillStyle=this.tone.edge;c.fillRect(px(x+(k-3)*(2+radius)),y-px(Math.sin(k)*radius*.25),2,1);}c.restore();}
     this.stats.drawCalls++;
   }
 
   private drawTitleScene(t:number){
-    const c=this.c,w=this.width,h=this.height,cx=px(w*.72),foot=px(h*.81),baseW=px(Math.min(w*.42,h*.52));
-    let plinth=this.structures.get('title');if(!plinth){plinth=structure(this.stage!.theme,baseW,px(h*.10),this.unit,351,false);this.structures.set('title',plinth);}c.drawImage(plinth,cx-baseW*.5,foot-2);
-    // A shattered orbit hangs behind the traveler, tied to the game's mask motif.
-    c.save();c.globalAlpha=.35;brokenOrbit(c,cx,foot-h*.27,h*.23,'#91a59b');c.restore();
-    for(let k=0;k<4;k++){const xx=cx-baseW*.42+k*baseW*.29;line(c,xx,foot-5,xx+3,foot-h*(.09+(k%2)*.05),'#405b58',2);}
-    this.glow(cx,foot-h*.26,h*.29,this.tone.accent,.085);
-    const scale=h*.46/64,sw=px(48*scale),sh=px(64*scale),frame=this.reduced?0:Math.floor(t*.65)%2;
-    c.fillStyle='#041016';c.fillRect(cx-sw*.18,foot,sw*.36,3);
-    c.drawImage(this.sprites,frame*48,0,48,64,cx-px(24*scale),foot-px(60*scale),sw,sh);
-    this.drawFlame(cx+baseW*.30,foot-12,t,1.2);
+    // Let the approved city painting carry the title; no enlarged gameplay
+    // sprite, pedestal, rings or floating fixtures behind the menu.
+    const c=this.c,w=this.width,h=this.height;
+    const shade=c.createLinearGradient(0,0,0,h);shade.addColorStop(0,'#00000000');shade.addColorStop(.45,'#03060830');shade.addColorStop(1,'#020508bb');
+    c.fillStyle=shade;c.fillRect(0,0,w,h);void t;
   }
 
   private drawEnemies(state:GameState,t:number){
@@ -908,6 +916,6 @@ export class GameRenderer {
 
   dispose() {
     if (this.media && this.onMotion) this.media.removeEventListener?.('change', this.onMotion);
-    this.layers = [];this.structures.clear();this.backplate=undefined;this.atlas.onload=null;
+    this.layers = [];this.structures.clear();this.backplate=undefined;this.atlas.onload=null;this.heroImage.onload=null;this.heroImage.onerror=null;
   }
 }

@@ -1,5 +1,17 @@
 import {test,expect} from '@playwright/test';
 test.use({hasTouch:true});
+test('settings controls stay within short narrow and landscape screens',async({page})=>{
+  for(const viewport of [{width:390,height:500},{width:320,height:480},{width:844,height:390}]){
+    await page.setViewportSize(viewport);await page.goto('/');await page.getByRole('button',{name:'Settings',exact:true}).click();
+    for(const name of ['Master volume','Music','Effects volume']){
+      const control=page.getByLabel(name,{exact:true});await control.scrollIntoViewIfNeeded();const bounds=await control.boundingBox();
+      expect(bounds).not.toBeNull();expect(bounds!.x).toBeGreaterThanOrEqual(0);expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(viewport.width);
+      await control.fill('0.5');await expect(control).toHaveValue('0.5');
+    }
+    await page.getByRole('button',{name:'Controls',exact:true}).click();await page.getByLabel('Larger touch buttons').check();
+    await page.getByRole('button',{name:'Display',exact:true}).click();await page.getByLabel('Reduce decorative motion').check();
+  }
+});
 test('fullscreen button enters and exits fullscreen, and pixels use integer scaling',async({page})=>{
   await page.goto('/');await page.getByRole('button',{name:'Fullscreen',exact:true}).click();
   await expect.poll(()=>page.evaluate(()=>!!document.fullscreenElement)).toBe(true);
