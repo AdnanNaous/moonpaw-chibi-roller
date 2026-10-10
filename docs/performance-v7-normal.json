@@ -1,0 +1,108 @@
+{
+  "cpu": 1,
+  "url": "http://127.0.0.1:4175/",
+  "frames": 609,
+  "p50": 16.699999999999818,
+  "p95": 16.800000000000182,
+  "p99": 33.400000000000546,
+  "max": 183.30000000000018,
+  "over33": 8,
+  "over50": 2,
+  "steady": {
+    "p95": 16.800000000000182,
+    "p99": 33.29999999999927,
+    "over50": 0
+  },
+  "longTasks": [
+    {
+      "start": 34.69999998807907,
+      "duration": 435
+    },
+    {
+      "start": 2202.2999999970198,
+      "duration": 196
+    }
+  ],
+  "topCPU": [
+    {
+      "fn": "(idle) ",
+      "milliseconds": 8597.441
+    },
+    {
+      "fn": "(program) ",
+      "milliseconds": 2202.61
+    },
+    {
+      "fn": "r http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 377.505
+    },
+    {
+      "fn": "unlock http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 103.051
+    },
+    {
+      "fn": "createImageBitmap ",
+      "milliseconds": 56.025
+    },
+    {
+      "fn": "resize http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 45.156
+    },
+    {
+      "fn": "render http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 40.791
+    },
+    {
+      "fn": "buildBackplate http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 26.13
+    },
+    {
+      "fn": "(garbage collector) ",
+      "milliseconds": 18.434
+    },
+    {
+      "fn": "m http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 17.738
+    },
+    {
+      "fn": "h http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 12.597
+    },
+    {
+      "fn": " http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 11.486
+    },
+    {
+      "fn": "M http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 9.642
+    },
+    {
+      "fn": "Z http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 9.194
+    },
+    {
+      "fn": "Je http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 7.753
+    },
+    {
+      "fn": "drawPilgrim http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 4.764
+    },
+    {
+      "fn": "He http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 4.737
+    },
+    {
+      "fn": "de http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 4.671
+    },
+    {
+      "fn": "glow http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 4.357
+    },
+    {
+      "fn": "tick http://127.0.0.1:4175/assets/index-D3RHGKXq.js",
+      "milliseconds": 3.841
+    }
+  ]
+}

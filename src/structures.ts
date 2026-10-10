@@ -15,6 +15,57 @@ const palettes:Record<Theme,Palette> = {
   throne:   {body:'#302f35',face:'#49454d',light:'#aca1a9',dark:'#191924',seam:'#151621',deposit:'#65545e'},
 };
 const seed=(n:number)=>{const v=Math.sin(n*37.19+5.7)*15731.17;return v-Math.floor(v);};
+let paintedMaterials:HTMLCanvasElement[]|undefined;
+let materialLoad:Promise<void>|undefined;
+/** Root invalidates its per-stage structure cache once this changes. */
+export let structureArtRevision=0;
+/** Decode and isolate all four material fragments in the shared atlas worker. */
+export function preloadStructureArt(){
+  if(materialLoad)return materialLoad;
+  materialLoad=new Promise<void>((resolve,reject)=>{
+    const image=new Image();
+    image.onerror=()=>reject(new Error('Terrain artwork failed to load'));
+    image.onload=async()=>{
+      try{
+        const {loadAtlas}=await import('./atlas-loader');
+        const materials=await loadAtlas(image,'terrain');
+        paintedMaterials=materials;structureArtRevision++;resolve();
+      }catch(error){reject(error);}
+    };
+    image.src=`${import.meta.env.BASE_URL}art/terrain-v7.png`;
+  });
+  return materialLoad;
+}
+
+function paintedStructure(c:C,theme:Theme,w:number,h:number,unit:number,id:number,ledge:boolean){
+  if(!paintedMaterials)return false;
+  const kind=theme==='foundry'||theme==='prison'||theme==='choir'?1:theme==='archives'?2:theme==='orchard'||theme==='abyss'?3:0;
+  const material=paintedMaterials[kind],p=palettes[theme];
+  const depth=Math.max(h,unit*(ledge?1.02:1.15))+(ledge?0:unit*.58),scale=depth/material.height;
+  // Crop a material section at its natural aspect ratio. Long terrain uses
+  // broad unequal sections, never squashes the entire slab into a tiny ledge.
+  c.save();c.beginPath();c.rect(0,0,w,depth+2);c.clip();
+  let x=0,part=0;
+  while(x<w){
+    const available=material.width*scale;
+    const span=Math.min(w-x,available*(.65+seed(id+part*7.3)*.34));
+    const sourceWidth=span/scale;
+    const sourceX=Math.floor(seed(id*3.1+part*19.7)*(material.width-sourceWidth));
+    c.drawImage(material,sourceX,0,sourceWidth,material.height,x,0,span,depth);
+    x+=span;part++;
+  }
+  c.globalCompositeOperation='source-atop';c.globalAlpha=theme==='flood'?.24:.13;c.fillStyle=p.body;c.fillRect(0,0,w,depth);c.globalAlpha=1;
+  const shade=c.createLinearGradient(0,depth*.35,0,depth);
+  shade.addColorStop(0,'#02080e00');shade.addColorStop(1,ledge?'#02080e25':'#02080e7c');c.fillStyle=shade;c.fillRect(0,0,w,depth);
+  c.restore();
+  // The platform's authored top edge stays exactly on the collision plane.
+  c.fillStyle=p.face;c.fillRect(0,0,w,2);
+  c.fillStyle=p.light;c.fillRect(0,0,w,1);
+  for(let x=3;x<w;x+=17+Math.floor(seed(x+id)*23)){
+    c.fillStyle=p.dark;c.fillRect(x,1,1,2);c.fillStyle=p.face;c.fillRect(x+1,0,2,1);
+  }
+  return true;
+}
 
 function polygon(c:C,points:number[],color:string){
   c.fillStyle=color;
@@ -50,6 +101,7 @@ export function structure(theme:Theme,w:number,h:number,unit:number,id:number,le
   canvas.width=Math.ceil(w)+8;
   canvas.height=Math.ceil(h+unit*(ledge?1.4:1.6))+8;
   const c=canvas.getContext('2d')!;c.imageSmoothingEnabled=false;c.translate(4,2);
+  if(paintedStructure(c,theme,w,h,unit,id,ledge))return canvas;
   const p=palettes[theme], iron=theme==='foundry'||theme==='prison'||theme==='choir';
   const timber=theme==='archives', root=theme==='orchard'||theme==='abyss';
   const variation=(i:number)=>seed(id*11.31+i*7.07+w*.017);

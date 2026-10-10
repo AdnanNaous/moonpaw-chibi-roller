@@ -1,12 +1,13 @@
 import type { Quality, SaveData } from './types';
+import { PROGRESS_LIMIT, validateSave } from './save-validation';
 export interface Settings {quality: Quality; muted: boolean; volume: number; musicVolume:number; effectsVolume:number; reducedMotion:boolean; largeTouch:boolean;}
 export function loadSave(): SaveData {
   try {
-    const data = JSON.parse(localStorage.getItem('moonpaw-progress-v2') || '{}');
-    return {unlocked: Math.max(1,Math.min(10,Number(data.unlocked)||1)), best: data.best && typeof data.best==='object' ? data.best : {}, secrets: Array.isArray(data.secrets)?data.secrets.filter((s:unknown)=>typeof s==='string'):[]};
-  } catch {return {unlocked: 1,best:{}};}
+    const raw = localStorage.getItem('moonpaw-progress-v2') || '{}';
+    return validateSave(raw.length <= PROGRESS_LIMIT ? JSON.parse(raw) : undefined);
+  } catch {return validateSave(undefined);}
 }
-export function storeSave(data: SaveData) {try {localStorage.setItem('moonpaw-progress-v2',JSON.stringify(data));} catch {/* Storage can be unavailable in private WebViews. */}}
+export function storeSave(data: SaveData) {try {localStorage.setItem('moonpaw-progress-v2',JSON.stringify(validateSave(data)));} catch {/* Storage can be unavailable in private WebViews. */}}
 export function loadSettings(): Settings {
   const defaults: Settings = {quality: matchMedia('(pointer: coarse)').matches ? 'balanced' : 'high', muted: false, volume: .70, musicVolume:.85, effectsVolume:1, reducedMotion:false, largeTouch:false};
   try {

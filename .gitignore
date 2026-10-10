@@ -17,3 +17,4 @@ android/app/src/main/assets/capacitor.plugins.json
 ios/App/App/public/
 ios/App/App/capacitor.config.json
 .DS_Store
+.audio-tools/

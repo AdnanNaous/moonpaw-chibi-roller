@@ -1,38 +1,50 @@
-const { app, BrowserWindow, Menu, protocol, net, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, protocol, net, shell, ipcMain, session } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-if(process.env.MOONPAW_TEST==='1'&&process.env.MOONPAW_TEST_PROFILE)app.setPath('userData',process.env.MOONPAW_TEST_PROFILE);
+const { CONTENT_POLICY, isMainDocument, isTrustedIPC, resolveAsset, allowedExternal } = require('./security.cjs');
+const testing = !app.isPackaged && process.env.MOONPAW_TEST === '1';
+if(testing&&process.env.MOONPAW_TEST_PROFILE)app.setPath('userData',process.env.MOONPAW_TEST_PROFILE);
 protocol.registerSchemesAsPrivileged([{scheme: 'moonpaw', privileges: {standard: true, secure: true, supportFetchAPI: true, corsEnabled: true}}]);
 app.whenReady().then(() => {
-  protocol.handle('moonpaw', (request) => {
-    const url = new URL(request.url);
-    const relative = decodeURIComponent(url.pathname).replace(/^\/+/, '') || 'index.html';
-    const root = path.join(__dirname, '../dist');
-    const resolved = path.resolve(root, relative);
-    if (!resolved.startsWith(root + path.sep) && resolved !== root) return new Response('Forbidden', {status: 403});
-    return net.fetch(pathToFileURL(resolved).toString());
+  session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  session.defaultSession.setPermissionCheckHandler(() => false);
+  protocol.handle('moonpaw', async (request) => {
+    if (!['GET', 'HEAD'].includes(request.method)) return new Response('Method not allowed', {status: 405});
+    const resolved = resolveAsset(request.url, path.join(__dirname, '../dist'));
+    if (!resolved) return new Response('Forbidden', {status: 403});
+    try {
+      const response = await net.fetch(pathToFileURL(resolved).toString());
+      const headers = new Headers(response.headers);
+      headers.set('Content-Security-Policy', CONTENT_POLICY);
+      headers.set('X-Content-Type-Options', 'nosniff');
+      return new Response(request.method === 'HEAD' ? null : response.body, {status: response.status, headers});
+    } catch { return new Response('Not found', {status: 404}); }
   });
   Menu.setApplicationMenu(null);
   const window = new BrowserWindow({
     title: `MOONPAW — Ashen Vow ${app.getVersion()}`, width: 1440, height: 900, minWidth: 800, minHeight: 500,
     backgroundColor: '#080909', show: false, autoHideMenuBar: true,
     icon: path.join(__dirname, '../dist/icon-512.png'),
-    webPreferences: {nodeIntegration: false, contextIsolation: true, sandbox: true, preload:path.join(__dirname,'preload.cjs')}
+    webPreferences: {nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true,
+      webviewTag: false, devTools: testing, additionalArguments: testing ? ['--moonpaw-test'] : [],
+      preload:path.join(__dirname,'preload.cjs')}
   });
-  const allowedLinks=new Set(['https://adnannaous.vercel.app','https://github.com/AdnanNaous','https://x.com/vc_351','https://www.linkedin.com/in/adnan-naous/','https://linktr.ee/VC351','https://github.com/mrbumpy409/GeneralUser-GS']);
-  window.webContents.setWindowOpenHandler(({url}) => {if(allowedLinks.has(url.replace(/\/$/,''))||allowedLinks.has(url))void shell.openExternal(url);return {action:'deny'};});
-  window.webContents.on('will-navigate', (event, url) => {if (!url.startsWith('moonpaw://game/')) event.preventDefault();});
-  ipcMain.handle('moonpaw:fullscreen-state',event=>event.sender===window.webContents&&window.isFullScreen());
+  window.webContents.setWindowOpenHandler(({url}) => {if(allowedExternal(url))void shell.openExternal(url).catch(()=>{});return {action:'deny'};});
+  window.webContents.on('will-navigate', (event, url) => {if (!isMainDocument(url)) event.preventDefault();});
+  window.webContents.on('will-frame-navigate', details => {if (!details.isMainFrame || !isMainDocument(details.url)) details.preventDefault();});
+  window.webContents.on('will-redirect', (event, url) => {if (!isMainDocument(url)) event.preventDefault();});
+  window.webContents.on('will-attach-webview', event => event.preventDefault());
+  ipcMain.handle('moonpaw:fullscreen-state',event=>isTrustedIPC(event,window.webContents)&&window.isFullScreen());
   ipcMain.handle('moonpaw:quit',event=>{
-    if(event.sender!==window.webContents||!event.sender.getURL().startsWith('moonpaw://game/'))throw new Error('Invalid application window');
+    if(!isTrustedIPC(event,window.webContents))throw new Error('Invalid application window');
     app.quit();
   });
   ipcMain.handle('moonpaw:fullscreen-toggle',event=>{
-    if(event.sender!==window.webContents||!event.sender.getURL().startsWith('moonpaw://game/'))return false;
+    if(!isTrustedIPC(event,window.webContents))return false;
     window.setFullScreen(!window.isFullScreen());return window.isFullScreen();
   });
   for(const type of ['enter-full-screen','leave-full-screen'])window.on(type,()=>window.webContents.send('moonpaw:fullscreen-change',window.isFullScreen()));
-  window.once('ready-to-show', () => {if(!process.env.MOONPAW_TEST)window.show();});
+  window.once('ready-to-show', () => {if(!testing)window.show();});
   window.loadURL('moonpaw://game/');
 });
 app.on('window-all-closed', () => app.quit());

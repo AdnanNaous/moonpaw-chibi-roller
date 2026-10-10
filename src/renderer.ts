@@ -1,6 +1,8 @@
 import {createPilgrimSprites, createEnemySprites, PILGRIM_CELL, PILGRIM_POSE} from './pixel-art';
-import {structure} from './structures';
-import {packPilgrimAtlas,PAINTED_PILGRIM_CELL} from './pilgrim-atlas';
+import {structure,preloadStructureArt} from './structures';
+import {PAINTED_PILGRIM_CELL} from './pilgrim-atlas';
+import {ENEMY_CELL,ENEMY_KINDS} from './enemy-atlas';
+import {loadAtlas} from './atlas-loader';
 import {brokenOrbit, paintMoth, architectureDetail} from './world-art';
 import type { GameState, Quality, Stage } from './types';
 
@@ -51,7 +53,10 @@ export class GameRenderer {
   private heroCell:{width:number;height:number;foot:number;body:number;frames:number}=PAINTED_PILGRIM_CELL;
   private readonly heroImage=new Image();
   private heroReady=false;
-  private readonly enemySprites=createEnemySprites();
+  private enemySprites=createEnemySprites();
+  private enemyCell:{width:number;height:number;foot:number;body:number}={width:48,height:64,foot:60,body:48};
+  private readonly enemyImage=new Image();
+  private disposed=false;
   private structures=new Map<string,HTMLCanvasElement>();
   private titlePresentation=false;
   private previousPlayer?:{x:number;y:number;stride:number};
@@ -61,11 +66,13 @@ export class GameRenderer {
   private enemyRim?:HTMLCanvasElement;
   private pilgrimLight?:HTMLCanvasElement;
   private foreground?:HTMLCanvasElement;
+  private frameOverlay?:HTMLCanvasElement;
+  private layerKey='';
+  private glowTextures=new Map<string,HTMLCanvasElement>();
+  private cinematic?:{chapter:number;beat:number;time:number};
   private readonly atlas=new Image();
   private backplate?:HTMLCanvasElement;
   private pixelScale=1;
-  private readonly screen: G;
-  private readonly scene: HTMLCanvasElement;
   private readonly c: G;
   private readonly noise: CanvasPattern | null;
   private quality: Quality;
@@ -91,21 +98,19 @@ export class GameRenderer {
     this.quality = quality;
     const screen = canvas.getContext('2d', { alpha: false });
     if (!screen) throw new Error('Canvas 2D is unavailable');
-    this.screen = screen;
-    this.scene = document.createElement('canvas');
-    const context = this.scene.getContext('2d', { alpha: false });
-    if (!context) throw new Error('Offscreen Canvas 2D is unavailable');
-    this.c = context;
+    // Draw at the pixel grid directly; the browser compositor scales the surface.
+    // Copying it into a second full-window canvas forced a synchronous raster flush.
+    this.c = screen;
     this.noise = this.makeNoise();
+    void preloadStructureArt().then(()=>{if(!this.disposed)this.structures.clear();}).catch(()=>{});
     const fallback=()=>{this.sprites=createPilgrimSprites();this.heroCell={...PILGRIM_CELL,body:47};this.pilgrimLight=undefined;this.heroReady=true;};
     // Keep the player visible if a run starts before the first download finishes.
     fallback();
-    this.heroImage.onload=()=>{
-      try{this.sprites=packPilgrimAtlas(this.heroImage);this.heroCell=PAINTED_PILGRIM_CELL;this.pilgrimLight=undefined;this.heroReady=true;}
-      catch(error){console.warn('The painted pilgrim could not be loaded; using the local fallback.',error);fallback();}
-    };
+    this.heroImage.onload=()=>{void loadAtlas(this.heroImage,'pilgrim').then(([atlas])=>{if(this.disposed)return;this.sprites=atlas;this.heroCell=PAINTED_PILGRIM_CELL;this.pilgrimLight=undefined;this.heroReady=true;}).catch(error=>{if(this.disposed)return;console.warn('The painted pilgrim could not be loaded; using the local fallback.',error);fallback();});};
     this.heroImage.onerror=fallback;
     this.heroImage.src=`${import.meta.env.BASE_URL}art/pilgrim-v6.png`;
+    this.enemyImage.onload=()=>{void loadAtlas(this.enemyImage,'enemies').then(([atlas])=>{if(this.disposed)return;this.enemySprites=atlas;this.enemyCell=ENEMY_CELL;this.enemyRim=undefined;}).catch(()=>{});};
+    this.enemyImage.src=`${import.meta.env.BASE_URL}art/enemies-v7.png`;
     this.atlas.onload=()=>this.buildBackplate();
     this.atlas.src=`${import.meta.env.BASE_URL}art/threshold-environments-v3.png`;
     if (typeof matchMedia === 'function') {
@@ -143,21 +148,29 @@ export class GameRenderer {
   resize() {
     const cw = Math.max(1, Math.round(this.canvas.clientWidth || this.canvas.width || 640));
     const ch = Math.max(1, Math.round(this.canvas.clientHeight || this.canvas.height || 360));
-    // CSS owns the play viewport, including the separate mobile control strip.
-    this.canvas.width = cw; this.canvas.height = ch;
-    this.screen.imageSmoothingEnabled = false;
     const logicalHeight = this.quality === 'low' ? 180 : this.quality === 'high' ? 320 : 270;
-    this.pixelScale=Math.max(2,Math.round(ch/logicalHeight));
-    this.height=Math.max(1,Math.floor(ch/this.pixelScale));
-    this.width=Math.max(1,Math.floor(cw/this.pixelScale));
-    this.scene.width = this.width; this.scene.height = this.height;
+    const scale=Math.max(2,Math.round(ch/logicalHeight));
+    const width=Math.max(1,Math.floor(cw/scale)),height=Math.max(1,Math.floor(ch/scale));
+    const unit=height/(cw/ch<.85?9.0:7.5);
+    if(this.width===width&&this.height===height&&this.unit===unit&&this.pixelScale===scale&&this.layers.length&&this.layerKey.endsWith(`:${this.quality}`))return;
+    // CSS owns the play viewport, including the separate mobile control strip.
+    this.canvas.width = width; this.canvas.height = height;
+    this.pixelScale=scale;
+    this.height=height;
+    this.width=width;
     this.c.imageSmoothingEnabled = false;
-    this.unit = this.height / (cw / ch < .85 ? 9.0 : 7.5);
+    this.unit = unit;
     this.stats.pixelScale=this.pixelScale;this.stats.width=this.width;this.stats.height=this.height;
+    this.buildFrameOverlay();
     this.buildLayers();
   }
 
   setPresentation(value:'title'|'game'){this.titlePresentation=value==='title';}
+  setCinematic(active:boolean,chapter:number,beat:number,time:number){
+    if(!active){this.cinematic=undefined;return;}
+    if(!this.cinematic&&this.stage){this.camX=this.stage.spawn.x-this.width/this.unit*.16-.6;this.camY=this.stage.spawn.y+(this.width/this.height<.85?1.45:2.05);}
+    this.cinematic={chapter,beat,time};
+  }
 
   /** Snapshot the last fixed step; render interpolation never changes collisions. */
   capturePhysics(state:GameState){
@@ -205,6 +218,9 @@ export class GameRenderer {
 
   private buildLayers() {
     if (!this.stage) return;
+    const key=`${this.theme}:${this.width}:${this.height}:${this.unit}:${this.quality}`;
+    if(this.layerKey===key)return;
+    this.layerKey=key;
     const layers: Layer[] = [];
     const tileW = Math.max(512, px(this.unit * 25));
     const specs = [{ speed: .08, opacity: .50 }, { speed: .25, opacity: .72 }, { speed: .50, opacity: .87 }];
@@ -768,9 +784,9 @@ export class GameRenderer {
       if(e.health<=0||e.phase==='dead')continue;
       const previous=this.previousEnemies.get(e.id);
       const x=this.X(this.blend(previous?.x,e.x)+e.w*.5),y=this.Y(this.blend(previous?.y,e.y));if(x< -90||x>this.width+90)continue;
-      const kind=e.kind==='regent'?3:e.kind==='marksman'?2:e.kind==='skirmisher'?1:0;
+      const kind=ENEMY_KINDS[e.kind as keyof typeof ENEMY_KINDS]??0;
       const pose=e.phase==='windup'?1:e.phase==='attack'?2:e.phase==='stagger'?3:0;
-      const sizeY=Math.max(34,px(e.h*this.unit*64/48)),sizeX=px(sizeY*.75);
+      const cell=this.enemyCell,scale=e.h*this.unit/cell.body,sizeY=px(cell.height*scale),sizeX=px(cell.width*scale),dy=-px(cell.foot*scale);
       if(e.phase==='windup'||e.phase==='attack'){
         const ax=this.X(e.attackX),ay=this.Y(e.attackY+e.attackH),aw=Math.max(2,px(e.attackW*this.unit)),ah=Math.max(2,px(e.attackH*this.unit));
         c.save();c.fillStyle=e.phase==='attack'?'#d4746550':'#e5b77b25';c.fillRect(ax,ay,aw,ah);
@@ -784,10 +800,10 @@ export class GameRenderer {
       const tilt=e.phase==='attack'?2:0;
       if(!this.enemyRim){this.enemyRim=document.createElement('canvas');this.enemyRim.width=this.enemySprites.width;this.enemyRim.height=this.enemySprites.height;const rim=this.enemyRim.getContext('2d')!;rim.drawImage(this.enemySprites,0,0);rim.globalCompositeOperation='source-in';rim.fillStyle='#d5b8a4';rim.fillRect(0,0,this.enemyRim.width,this.enemyRim.height);}
       c.save();c.globalAlpha=e.phase==='windup'?.75:.46;
-      for(const [rx,ry] of [[-1,0],[1,0],[0,-1]])c.drawImage(this.enemyRim,kind*48,pose*64,48,64,-px(sizeX/2)+tilt+rx,-px(sizeY*60/64)+ry,sizeX,sizeY);
+      for(const [rx,ry] of [[-1,0],[1,0],[0,-1]])c.drawImage(this.enemyRim,kind*cell.width,pose*cell.height,cell.width,cell.height,-px(sizeX/2)+tilt+rx,dy+ry,sizeX,sizeY);
       c.restore();
-      c.drawImage(this.enemySprites,kind*48,pose*64,48,64,-px(sizeX/2)+tilt,-px(sizeY*60/64),sizeX,sizeY);
-      c.save();c.globalCompositeOperation='screen';c.globalAlpha=this.lightStrength(e.x,e.y);c.drawImage(this.enemyRim,kind*48,pose*64,48,64,-px(sizeX/2)+tilt,-px(sizeY*60/64),sizeX,sizeY);c.restore();
+      c.drawImage(this.enemySprites,kind*cell.width,pose*cell.height,cell.width,cell.height,-px(sizeX/2)+tilt,dy,sizeX,sizeY);
+      c.save();c.globalCompositeOperation='screen';c.globalAlpha=this.lightStrength(e.x,e.y);c.drawImage(this.enemyRim,kind*cell.width,pose*cell.height,cell.width,cell.height,-px(sizeX/2)+tilt,dy,sizeX,sizeY);c.restore();
       c.restore();
       if(e.phase==='stagger'){this.glow(x,y-sizeY*.5,20,'#d9c7a5',.16);for(let k=0;k<7;k++){const a=k*Math.PI*2/7; c.fillStyle=k%2?'#d7bc91':'#7cc2c4';c.fillRect(px(x+Math.cos(a)*14),px(y-sizeY*.5+Math.sin(a)*12),2,1);}}
       if(e.health<e.maxHealth||e.phase==='windup'){
@@ -812,9 +828,10 @@ export class GameRenderer {
   private glow(x: number, y: number, r: number, color: string, alpha: number) {
     const c = this.c;
     c.save(); c.globalCompositeOperation = 'screen'; c.globalAlpha = alpha;
-    const g = c.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, color); g.addColorStop(.24, color); g.addColorStop(1, '#00000000');
-    c.fillStyle = g; c.fillRect(px(x - r), px(y - r), px(r * 2), px(r * 2)); c.restore();
+    const radius=Math.max(1,Math.ceil(r)),key=`${radius}:${color}`;
+    let tile=this.glowTextures.get(key);
+    if(!tile){tile=document.createElement('canvas');tile.width=tile.height=radius*2;const context=tile.getContext('2d')!,g=context.createRadialGradient(radius,radius,0,radius,radius,radius);g.addColorStop(0,color);g.addColorStop(.24,color);g.addColorStop(1,'#00000000');context.fillStyle=g;context.fillRect(0,0,tile.width,tile.height);if(this.glowTextures.size>=64)this.glowTextures.delete(this.glowTextures.keys().next().value!);this.glowTextures.set(key,tile);}
+    c.drawImage(tile,px(x-radius),px(y-radius));c.restore();
   }
 
   private drawFlame(x: number, y: number, t: number, power = 1) {
@@ -855,9 +872,10 @@ export class GameRenderer {
     c.restore();
   }
 
-  private finishFrame(t: number) {
-    const c = this.c, w = this.width, h = this.height;
-    const vignette = c.createRadialGradient(w * .5, h * .45, h * .10, w * .5, h * .5, Math.max(w, h) * .68);
+  private buildFrameOverlay(){
+    const tile=document.createElement('canvas');tile.width=this.width;tile.height=this.height;
+    const c=tile.getContext('2d')!,w=this.width,h=this.height;
+    const vignette=c.createRadialGradient(w*.5,h*.45,h*.10,w*.5,h*.5,Math.max(w,h)*.68);
     vignette.addColorStop(0, '#00000000'); vignette.addColorStop(.65, '#00000020'); vignette.addColorStop(1, '#000000c0');
     c.fillStyle = vignette; c.fillRect(0, 0, w, h);
     if (this.noise) { c.save(); c.globalAlpha = this.quality === 'high' ? .10 : .06; c.fillStyle = this.noise; c.fillRect(0, 0, w, h); c.restore(); }
@@ -865,10 +883,11 @@ export class GameRenderer {
     c.save(); c.globalAlpha = .045; c.fillStyle = '#000';
     for (let y = 1; y < h; y += 3) c.fillRect(0, y, w, 1);
     c.restore();
-    this.screen.fillStyle='#080909';this.screen.fillRect(0,0,this.canvas.width,this.canvas.height);
-    this.screen.imageSmoothingEnabled = false;
-    const dw=this.width*this.pixelScale,dh=this.height*this.pixelScale;
-    this.screen.drawImage(this.scene,Math.floor((this.canvas.width-dw)/2),Math.floor((this.canvas.height-dh)/2),dw,dh);
+    this.frameOverlay=tile;
+  }
+
+  private finishFrame(t: number) {
+    if(this.frameOverlay)this.c.drawImage(this.frameOverlay,0,0);
     void t;
   }
 
@@ -884,9 +903,11 @@ export class GameRenderer {
     const previous=this.previousPlayer,p=state.player;
     const view={...state,player:{...p,x:this.blend(previous?.x,p.x),y:this.blend(previous?.y,p.y),stride:this.blend(previous?.stride,p.stride)}};
     const look = menu ? (this.width / this.height < .85 ? -1.0 : -2.3) : clamp(p.vx/5.2,-1,1)*1.05;
-    const nextX = view.player.x + look;
+    const shot=this.cinematic;
+    const approach=shot?clamp((shot.beat+Math.min(1,shot.time/4.5))/3,0,1):1;
+    const nextX = shot?state.stage.spawn.x-this.width/this.unit*.16-.6*(1-approach):view.player.x + look;
     const ground=state.stage.platforms.find(p=>p.h>1&&state.player.x>=p.x&&state.player.x<p.x+p.w)?.y??0;
-    const nextY = ground+2.55+clamp(view.player.y-ground-2.2,0,4)*.45;
+    const nextY = shot?state.stage.spawn.y+(this.width/this.height<.85?.85:1.45)+.6*(1-approach):ground+2.55+clamp(view.player.y-ground-2.2,0,4)*.45;
     const easing = menu || this.reduced ? 1 : 1 - Math.exp(-Math.max(0, dt) * 8);
     this.camX += (nextX - this.camX) * easing;
     this.camY += (nextY - this.camY) * easing;
@@ -915,7 +936,8 @@ export class GameRenderer {
   }
 
   dispose() {
+    this.disposed=true;
     if (this.media && this.onMotion) this.media.removeEventListener?.('change', this.onMotion);
-    this.layers = [];this.structures.clear();this.backplate=undefined;this.atlas.onload=null;this.heroImage.onload=null;this.heroImage.onerror=null;
+    this.layers = [];this.layerKey='';this.structures.clear();this.glowTextures.clear();this.frameOverlay=undefined;this.backplate=undefined;this.atlas.onload=null;this.heroImage.onload=null;this.heroImage.onerror=null;this.enemyImage.onload=null;
   }
 }

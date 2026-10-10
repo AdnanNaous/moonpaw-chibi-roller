@@ -37,7 +37,7 @@ test('story, gameplay input, paused journal/settings, credits and ending choices
   await expect(page.getByRole('link',{name:'GitHub ↗'})).toHaveAttribute('href','https://github.com/AdnanNaous');
   // UI fixtures only. Campaign traversal and boss windows are tested separately.
   for(const [choice,title] of [['Give your name','The Last Lantern'],['Leave alone','The Door for One'],['Name every witness','The Silence After']]){
-    await page.evaluate(()=>{const save=(window as any).moonpaw.save;Object.assign(save,{unlocked:10,best:{},secrets:Array.from({length:10},(_,i)=>`fixture-${i}`)});localStorage.setItem('moonpaw-progress-v2',JSON.stringify(save));});
+    await page.evaluate(()=>{const save=(window as any).moonpaw.save;Object.assign(save,{unlocked:10,best:{},secrets:['sentence-of-stone:record','mouth-of-iron:record','drowned-procession:record','palimpsest:record','the-bell-spine:record','the-hungry-orchard:record','arrow-vigil:record','choir-of-knives:record','unlit-below:record','warden-at-the-door:record']});localStorage.setItem('moonpaw-progress-v2',JSON.stringify(save));});
     await page.reload();await page.getByRole('button',{name:'Continue',exact:true}).click();await page.getByRole('button',{name:'Begin now'}).click();
     await page.evaluate(()=>{const s=(window as any).moonpaw.state;s.relicsCollected=s.relicsRequired;s.bossHealth=0;s.stage.arenas.forEach((a:any)=>a.cleared=true);s.stage.enemies.forEach((e:any)=>{e.health=0;e.phase='dead';});s.player.x=s.stage.exit.x;s.player.y=s.stage.exit.y;});
     await page.getByRole('button',{name:choice,exact:true}).click();await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();

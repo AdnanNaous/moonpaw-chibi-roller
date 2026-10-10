@@ -15,6 +15,7 @@ import {canExit,exitLabel,exitApplication,onAndroidBack} from './platform';
 import {loadSave,storeSave,loadSettings,storeSettings} from './storage';
 import type {InputFrame,Quality} from './types';
 import {icon,titleScreen,journeyScreen} from './ui';
+import {cinematicScreen} from './cinematic';
 
 const app=document.querySelector<HTMLElement>('#app')!;
 const canvas=document.querySelector<HTMLCanvasElement>('#game')!;
@@ -38,10 +39,11 @@ let page:Page='title';
 let settingsTab:'audio'|'display'|'controls'='audio',exitReturn:Page='title';
 let previewChapter=game.save.unlocked-1;
 let intro=-1,ending:EndingKey|undefined,lastMode='',lastEvent=-1;
+let cinematicTime=0;
 let clock=performance.now(),accumulator=0,elapsed=0,fps=60,navDelay=0,noticeExpiry=0;
 let lastHud=0,pawClicks=0,sequence='';
 const discovered=new Set<string>();
-try{for(const key of JSON.parse(localStorage.getItem('moonpaw-journal-v2')||'[]'))if(typeof key==='string')discovered.add(key);}catch{}
+try{const raw=localStorage.getItem('moonpaw-journal-v2')||'[]';if(raw.length<=32768){const records=JSON.parse(raw);const known=new Set(Array.from({length:10},(_,i)=>[`${i}:intro`,`${i}:0`,`${i}:1`]).flat());if(Array.isArray(records))for(const key of records.slice(0,100))if(typeof key==='string'&&known.has(key))discovered.add(key);}}catch{}
 const persistJournal=()=>{try{localStorage.setItem('moonpaw-journal-v2',JSON.stringify([...discovered]));}catch{}};
 const escape=(text:string)=>text.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 const button=(label:string,action:string,kind='')=>`<button data-action="${action}" class="${kind}">${label}</button>`;
@@ -51,14 +53,15 @@ const fullscreen=new FullscreenControl(updateFullscreen);
 const fullscreenButton=(compact=false)=>fullscreen.supported?`<button data-action="fullscreen" class="${compact?'pause':'plain'}" aria-label="${fullscreen.active?'Exit fullscreen':'Fullscreen'}" title="${fullscreen.active?'Exit fullscreen':'Fullscreen'} (F11)">${compact?icon('full'):fullscreen.active?'Exit fullscreen':'Fullscreen'}</button>`:'';
 function updateFullscreen(){document.querySelectorAll<HTMLButtonElement>('[data-action=fullscreen]').forEach(b=>{b.setAttribute('aria-label',fullscreen.active?'Exit fullscreen':'Fullscreen');b.title=`${fullscreen.active?'Exit fullscreen':'Fullscreen'} (F11)`;b.innerHTML=b.classList.contains('pause')?icon('full'):fullscreen.active?'Exit fullscreen':'Fullscreen';});}
 const reset=()=>{dock.dispose();dock=new TouchDock(controls,input);input.reset();};
+const resetFrameClock=()=>{clock=performance.now();accumulator=0;navDelay=0;pending={move:0,jump:false,jumpPressed:false,dashPressed:false,attackPressed:false,pausePressed:false,confirmPressed:false};};
 function notice(text:string,duration=6500){narration.hidden=false;narration.classList.add('visible');narration.textContent=text;noticeExpiry=elapsed+duration/1000;}
 function stageStart(index:number){
   audio.unlock();game.start(index);renderer.setStage(game.state.stage);intro=0;ending=undefined;page='title';
-  game.pause();reset();audio.start(index);discovered.add(`${index}:intro`);persistJournal();sync();
+  cinematicTime=0;game.pause();reset();resetFrameClock();renderer.setCinematic(true,index,0,0);audio.start(index);discovered.add(`${index}:intro`);persistJournal();sync();canvas.focus();
 }
-function begin(){intro=-1;game.resume();reset();sync();canvas.focus();notice(game.state.stage.description,6500);}
-function title(){intro=-1;ending=undefined;game.menu();audio.enterTitle(game.save.unlocked-1);page='title';renderer.setStage(game.state.stage);reset();sync();}
-function credits(){return `<p>Created & directed by <strong>Adnan Naous</strong>.</p><p>Pixel artwork, story, original musical arrangements and engineering developed with Codex. Prototype explored with Grok.</p><p class="quiet">Movement, combat pressure and layered fantasy worlds informed the direction. No artwork, characters or soundtrack from the referenced games was copied.</p><p class="quiet">Instrument samples: GeneralUser GS, S. Christian Collins. Used for original game arrangements under its music-production license. <a href="https://github.com/mrbumpy409/GeneralUser-GS" target="_blank" rel="noopener noreferrer">Instrument source ↗</a></p><p class="quiet">Typography: Barlow and Barlow Condensed by the Barlow Project Authors, bundled under the SIL Open Font License. <a href="./barlow-OFL.txt" target="_blank" rel="noopener noreferrer">Font license ↗</a></p><p class="quiet">Title lettering: Cormorant SC by the Cormorant Project Authors, bundled under the SIL Open Font License. <a href="./cormorant-OFL.txt" target="_blank" rel="noopener noreferrer">Title font license ↗</a></p><nav class="links">${CREATOR_LINKS.map(l=>`<a href="${l.url}" target="_blank" rel="noopener noreferrer">${escape(l.label)} ↗</a>`).join('')}</nav><p class="quiet">For the ones who were never named.</p>`;}
+function begin(){intro=-1;renderer.setCinematic(false,game.state.stageIndex,0,0);game.resume();reset();resetFrameClock();sync();canvas.focus();notice(game.state.stage.description,6500);}
+function title(){intro=-1;cinematicTime=0;renderer.setCinematic(false,game.state.stageIndex,0,0);ending=undefined;game.menu();audio.enterTitle(game.save.unlocked-1);page='title';renderer.setStage(game.state.stage);reset();resetFrameClock();sync();}
+function credits(){return `<p>Created & directed by <strong>Adnan Naous</strong>.</p><p class="quiet">Movement, combat pressure and layered fantasy worlds informed the direction. No artwork, characters or soundtrack from the referenced games was copied.</p><p class="quiet">Instrument samples: GeneralUser GS, S. Christian Collins. Used for original game arrangements under its music-production license. <a href="https://github.com/mrbumpy409/GeneralUser-GS" target="_blank" rel="noopener noreferrer">Instrument source ↗</a></p><p class="quiet">Typography: Barlow and Barlow Condensed by the Barlow Project Authors, bundled under the SIL Open Font License. <a href="./barlow-OFL.txt" target="_blank" rel="noopener noreferrer">Font license ↗</a></p><p class="quiet">Title lettering: Cormorant SC by the Cormorant Project Authors, bundled under the SIL Open Font License. <a href="./cormorant-OFL.txt" target="_blank" rel="noopener noreferrer">Title font license ↗</a></p><nav class="links">${CREATOR_LINKS.map(l=>`<a href="${l.url}" target="_blank" rel="noopener noreferrer">${escape(l.label)} ↗</a>`).join('')}</nav><p class="quiet">For the ones who were never named.</p>`;}
 function journal(){
   const records=STAGE_INFO.flatMap((stage,i)=>{
     if(!discovered.has(`${i}:intro`))return [];
@@ -87,7 +90,7 @@ function sync(){
   hud.innerHTML=menu?'':`<div class="vitals"><span class="vital-emblem">${icon('seal')}</span><div><div id="health" role="meter" aria-label="Health" aria-valuemin="0"></div><div class="stamina" role="meter" aria-label="Stamina" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><i></i></div></div></div><div class="identity"><small>THRESHOLD ${String(game.state.stageIndex+1).padStart(2,'0')}</small><strong>${escape(game.state.stage.name)}</strong><span id="objective"></span></div><div class="window-actions"><span id="relics" title="Recovered names"></span>${fullscreenButton(true)}<button data-action="pause" class="pause" aria-label="Pause">${icon('pause')}</button></div><div id="opponent" hidden><small></small><div role="meter" aria-label="Enemy health" aria-valuemin="0"><i></i></div></div>`;
   if(menu&&page==='title')app.innerHTML=titleScreen(game.save,fullscreenButton(),exitButton());
   else if(menu||page!=='title')app.innerHTML=`<section class="sheet ${page==='settings'?'settings-sheet':page==='pacts'?'pact-sheet':page==='chapters'?'journey-sheet':''}">${page==='pacts'?'':button('← Back','back','back')}${secondary()}</section>`;
-  else if(intro>=0){const chapter=CHAPTERS[game.state.stageIndex],line=chapter.lines[intro];app.innerHTML=`<section class="dialog story-dialog"><div class="story-chapter"><span>${String(game.state.stageIndex+1).padStart(2,'0')}</span><div><p class="eyebrow">${escape(chapter.tag)}</p><h2>${escape(game.state.stage.name)}</h2></div></div><div class="story-body"><p class="speaker">${escape(line.speaker)}</p><p class="story-text">${escape(line.text)}</p></div><div class="dialog-actions"><span class="story-progress" aria-label="${intro+1} of ${chapter.lines.length}">${chapter.lines.map((_,i)=>`<i class="${i<=intro?'read':''}"></i>`).join('')}</span>${button(intro===chapter.lines.length-1?'Begin':'Continue','story-next','primary')}${button('Begin now','begin','plain')}</div></section>`;}
+  else if(intro>=0)app.innerHTML=cinematicScreen(game.state.stageIndex,intro,game.state.stage.name,settings.reducedMotion);
   else if(mode==='paused')app.innerHTML=`<section class="dialog"><p class="eyebrow">THE BELL IS STILL</p><h2>Pause</h2>${button('Resume','resume','primary')}<nav class="pause-nav">${button('Journal','journal')}${button('Settings','settings')}${button('Restart','restart')}${button('Title','title')}${exitButton()}</nav></section>`;
   else if(mode==='complete')app.innerHTML=`<section class="dialog"><p class="eyebrow">A NAME CARRIED BEYOND THE GATE</p><h2>${escape(game.state.stage.name)}</h2><p class="story-text">${escape(CHAPTERS[game.state.stageIndex].after)}</p>${button('Cross the next threshold','next','primary')}${button('Title','title','plain')}</section>`;
   else if(mode==='ending')app.innerHTML=ending?`<section class="dialog ending"><p class="eyebrow">${ENDINGS[ending].tag}</p><h2>${ENDINGS[ending].title}</h2>${ENDINGS[ending].lines.map(l=>`<p>${escape(l)}</p>`).join('')}${button('Credits','ending-credits','primary')}${button('Title','title','plain')}</section>`:`<section class="dialog"><p class="eyebrow">THE REGENT FALLS SILENT</p><h2>What will you give?</h2><p>${escape(CHAPTERS[9].after)}</p>${button('Give your name','ending-lantern','choice')}${button('Leave alone','ending-home','choice')}${button('Name every witness','ending-dawn','choice')}<p class="quiet">${game.save.secrets?.length||0}/10 memories recovered. Every witness is needed to break the bell.</p></section>`;
@@ -126,7 +129,7 @@ function action(key:string){
   if(key==='start')stageStart(game.save.unlocked-1);
   else if(['chapters','settings','journal','credits'].includes(key)){page=key as typeof page;sync();}
   else if(key==='back'){page='title';sync();}
-  else if(key==='story-next'){if(++intro>=CHAPTERS[game.state.stageIndex].lines.length)begin();else sync();}
+  else if(key==='story-next'){if(intro<0)return;if(++intro>=CHAPTERS[game.state.stageIndex].lines.length)begin();else{cinematicTime=0;reset();resetFrameClock();renderer.setCinematic(true,game.state.stageIndex,intro,0);sync();app.querySelector<HTMLButtonElement>('[data-action=story-next]')?.focus({preventScroll:true});}}
   else if(key==='begin')begin();
   else if(key==='pause'){if(game.state.mode==='playing'){game.pause();reset();page='title';sync();}}
   else if(key==='resume'){game.resume();reset();sync();canvas.focus();}
@@ -144,7 +147,7 @@ function updateHud(){
   const s=game.state,bar=hud.querySelector<HTMLElement>('.stamina i'),meter=hud.querySelector('.stamina');
   if(bar)bar.style.width=`${Math.max(0,s.player.stamina)}%`;
   meter?.setAttribute('aria-valuenow',String(Math.round(s.player.stamina)));
-  const relics=hud.querySelector('#relics');if(relics)relics.innerHTML=`<span aria-hidden="true">${icon('seal')}</span><b>${s.relicsCollected}<small> / ${s.relicsRequired}</small></b>`;
+  const relics=hud.querySelector('#relics'),relicCount=`${s.relicsCollected}/${s.relicsRequired}`;if(relics&&relics.getAttribute('data-count')!==relicCount){relics.setAttribute('data-count',relicCount);relics.innerHTML=`<span aria-hidden="true">${icon('seal')}</span><b>${s.relicsCollected}<small> / ${s.relicsRequired}</small></b>`;}
   const health=hud.querySelector('#health');if(health){health.setAttribute('aria-valuenow',String(s.player.health));health.setAttribute('aria-valuemax',String(s.player.maxHealth));const value=`${s.player.health}/${s.player.maxHealth}`;if(health.getAttribute('data-health')!==value){health.setAttribute('data-health',value);health.innerHTML=Array.from({length:s.player.maxHealth},(_,i)=>`<i class="${i<s.player.health?'filled':''}" aria-hidden="true"></i>`).join('');}}
   const objective=hud.querySelector('#objective');if(objective)objective.textContent=s.arenaActive?'THE WAY IS SEALED':`${s.stage.arenas.filter(a=>a.cleared).length} / 3 ENCOUNTERS`;
   const opponent=hud.querySelector<HTMLElement>('#opponent'),enemy=s.stage.enemies.filter(e=>e.arena===s.arenaActive&&e.health>0).sort((a,b)=>Math.abs(a.x-s.player.x)-Math.abs(b.x-s.player.x))[0];
@@ -168,6 +171,7 @@ function frame(now:number){
   requestAnimationFrame(frame);const dt=Math.min(.075,Math.max(0,(now-clock)/1000));clock=now;
   if(document.hidden){accumulator=0;return;}elapsed+=dt;fps+=(1/Math.max(dt,.001)-fps)*.04;
   const sample=input.sample();
+  if(intro>=0){cinematicTime+=dt;renderer.setCinematic(true,game.state.stageIndex,intro,cinematicTime);}
   if(game.state.mode==='playing'&&intro<0&&game.state.boonOptions.length){audio.play('arena_cleared');game.pause();reset();page='pacts';sync();}
   audio.setIntensity(game.state.arenaActive?1:0);
   audio.tickMotion(game.state,dt);
@@ -182,7 +186,12 @@ function frame(now:number){
     }
   }else{
     accumulator=0;
-    if(sample.pausePressed&&game.state.mode==='paused'){if(page==='pacts')notice('Choose a pact to continue.');else if(page!=='title'){page='title';sync();}else if(intro>=0)begin();else action('resume');}
+    if(intro>=0){
+      if(sample.pausePressed)action('begin');
+      else if(sample.confirmPressed&&!app.contains(document.activeElement))action('story-next');
+      else gamepadMenu(sample,dt);
+    }
+    else if(sample.pausePressed&&game.state.mode==='paused'){if(page==='pacts')notice('Choose a pact to continue.');else if(page!=='title'){page='title';sync();}else action('resume');}
     else if(sample.confirmPressed&&input.device!=='controller'&&(document.activeElement===canvas||document.activeElement===document.body)){if(intro>=0)action('story-next');else if(game.state.mode==='menu'&&page==='title')action('start');else if(game.state.mode==='complete')action('next');}
     else gamepadMenu(sample,dt);
     pending.jumpPressed=pending.dashPressed=pending.pausePressed=false;pending.attackPressed=false;
@@ -195,14 +204,15 @@ function frame(now:number){
 new ResizeObserver(()=>renderer.resize()).observe(document.querySelector('#scene')!);
 addEventListener('resize',()=>renderer.resize());
 addEventListener('blur',()=>{if(game.state.mode==='playing')action('pause');reset();});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){if(game.state.mode==='playing')action('pause');reset();audio.suspend();}else clock=performance.now();});
+document.addEventListener('visibilitychange',()=>{document.body.classList.toggle('film-suspended',document.hidden);if(document.hidden){if(game.state.mode==='playing')action('pause');reset();audio.suspend();}else resetFrameClock();});
 canvas.addEventListener('pointerdown',()=>audio.unlock());
 app.addEventListener('pointerover',e=>{if((e.target as HTMLElement).closest('button'))audio.ui('focus');});
 app.addEventListener('focusin',e=>{if((e.target as HTMLElement).closest('button,input,select'))audio.ui('focus');});
 addEventListener('pagehide',()=>{storeSave(game.save);persistJournal();});
-onAndroidBack(()=>{if(game.state.mode==='playing')action('pause');else if(page!=='title')action('back');else action('exit');});
+onAndroidBack(()=>{if(intro>=0)action('begin');else if(game.state.mode==='playing')action('pause');else if(page!=='title')action('back');else action('exit');});
 addEventListener('keydown',e=>{if(!e.repeat){sequence=(sequence+e.key).slice(-3);if(sequence==='351')notice('CELL 351 · A name the Regent could not take. Adnan was here.',9000);}});
 app.addEventListener('click',e=>{if((e.target as HTMLElement).closest('h1')&&++pawClicks===7){notice('Seven vows. Three still unbroken.',6000);pawClicks=0;}});
-Object.defineProperty(window,'moonpaw',{value:{get state(){return game.state;},get save(){return game.save;},get stats(){return {...renderer.stats,fps};}}});
+// The production game never exposes mutable simulation state to its page.
+if(import.meta.env.DEV||window.moonpawDesktop?.testing)Object.defineProperty(window,'moonpaw',{value:{get state(){return game.state;},get save(){return game.save;},get stats(){return {...renderer.stats,fps};}}});
 audio.enterTitle(game.save.unlocked-1);sync();requestAnimationFrame(frame);
 if('serviceWorker' in navigator&&location.protocol!=='moonpaw:'&&import.meta.env.PROD)void navigator.serviceWorker.register('./sw.js').catch(console.warn);

@@ -1,7 +1,7 @@
 """Render original music and Foley. Python + NumPy + Node, no runtime synthesis.
 
 Score instruments use GeneralUser GS 2.0.3 under its musical-recording license.
-The optional render dependencies are cached in ignored .codex/audio-tools, not
+The optional render dependencies are cached in ignored .audio-tools, not
 installed into the game. See docs/AUDIO_MANIFEST.md for provenance and limits.
 """
 from pathlib import Path
@@ -17,7 +17,7 @@ SR = 22050
 OUT = Path(__file__).resolve().parents[1] / "public" / "audio"
 OUT.mkdir(parents=True, exist_ok=True)
 
-TOOLS = OUT.parents[1] / ".codex" / "audio-tools"
+TOOLS = OUT.parents[1] / ".audio-tools"
 TOOLS.mkdir(parents=True, exist_ok=True)
 
 def fetch_checked(url, path, sha):

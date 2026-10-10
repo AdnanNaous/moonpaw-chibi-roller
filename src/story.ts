@@ -1,6 +1,20 @@
 export interface Line { speaker: string; text: string }
 export interface FieldNote { speaker: string; text: string }
 
+/** Physical actions in the opening shots, separate from witness dialogue. */
+export const CHAPTER_SHOTS = [
+  [{action:'A ribbon catches on the open gate.',prop:'ribbon',duration:4.8},{action:'A name has been cut out of the stone.',prop:'slate',duration:4.2},{action:'The lamp answers when Noir touches the grave.',prop:'lamp',duration:4.6}],
+  [{action:'The chain pulls. There is no worker at the other end.',prop:'chain',duration:4.6},{action:'A nameplate disappears into the cold furnace.',prop:'nameplate',duration:4.4},{action:'One bell tongue was never melted.',prop:'tongue',duration:4.6}],
+  [{action:'The water stops one stroke below the window.',prop:'water',duration:4.5},{action:'The bolt is on this side of the door.',prop:'bolt',duration:4.1},{action:'A small handprint remains above the tide.',prop:'hand',duration:4.6}],
+  [{action:'The ink vanishes. The street remains.',prop:'ink',duration:4.4},{action:'Under the erased entry: Elian Ilyan.',prop:'page',duration:4.7},{action:'A seal holds the missing page shut.',prop:'seal',duration:4.2}],
+  [{action:'The rope tightens before the bell moves.',prop:'rope',duration:4.7},{action:'The brass tongue strikes. A name disappears.',prop:'bell',duration:4.2},{action:'Between two strokes, a voice almost escapes.',prop:'interval',duration:4.8}],
+  [{action:'The branch bends toward a name spoken aloud.',prop:'branch',duration:4.8},{action:'Mara tied the same knot here.',prop:'knot',duration:4.5},{action:'Noir leaves the white fruit untouched.',prop:'fruit',duration:4.6}],
+  [{action:'Scratches continue behind the locked door.',prop:'marks',duration:4.4},{action:'Cell seven opens from the inside.',prop:'cell',duration:4.5},{action:'The key turns. Nothing steps out.',prop:'key',duration:4.8}],
+  [{action:'Ten voices start on the same breath.',prop:'voices',duration:4.5},{action:'Their last word has been crossed out.',prop:'score',duration:4.6},{action:'The bell waits for a sound that does not come.',prop:'silence',duration:5.2}],
+  [{action:'The reflection turns before Noir does.',prop:'reflection',duration:4.8},{action:'Two sets of tracks reach the same gate.',prop:'tracks',duration:4.5},{action:'The false moon opens like a mouth.',prop:'moon',duration:4.8}],
+  [{action:'The Regent holds a place for one more name.',prop:'throne',duration:4.6},{action:'Noir sets the witnesses before him.',prop:'witnesses',duration:4.4},{action:'For the first time, the bell cannot choose.',prop:'fracture',duration:4.9},{action:'The way home waits beyond the broken seal.',prop:'threshold',duration:4.6}]
+] as const;
+
 /** Two records per chapter: one at the midpoint and one near the exit. */
 export const FIELD_NOTES: [FieldNote, FieldNote][] = [
   [{speaker:'GRAVE MARKER',text:'Sera Vale. Bell ringer. Buried with an empty coffin; her name kept the first lamp burning.'},{speaker:'SERA’S SCRATCHES',text:'The dead are not calling us down. Something below is wearing their voices to make us open the gate.'}],

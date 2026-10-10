@@ -1,6 +1,6 @@
 {
   "name": "moonpaw-chibi-roller",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "A dark pixel horror pilgrimage through ten dangerous thresholds.",
   "author": "Adnan Naous",
@@ -64,6 +64,14 @@
     },
     "portable": {
       "artifactName": "MOONPAW-Ashen-Vow-${version}-Windows.exe"
+    },
+    "electronFuses": {
+      "enableNodeOptionsEnvironmentVariable": false,
+      "runAsNode": false,
+      "onlyLoadAppFromAsar": true,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "enableNodeCliInspectArguments": false,
+      "grantFileProtocolExtraPrivileges": false
     }
   }
 }

@@ -5,6 +5,7 @@ const os = require('node:os');
 (async()=>{
   const root=path.resolve(__dirname,'..');
   const packaged=process.env.MOONPAW_EXECUTABLE;
+  if(packaged)throw new Error('This smoke test uses the development-shell test bridge. Packaged builds intentionally disable that bridge; validate them through the visible application UI instead.');
   const profile=await fs.mkdtemp(path.join(os.tmpdir(),'moonpaw-smoke-'));
   const application=await _electron.launch({executablePath:packaged||path.join(root,'node_modules/electron/dist/electron.exe'),args:packaged?[]:['.'],cwd:root,env:{...process.env,MOONPAW_TEST:'1',MOONPAW_TEST_PROFILE:profile}});
   let exited=false;

@@ -1,5 +1,8 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import security from '../electron/security.cjs';
+const html=await readFile('dist/index.html','utf8');
+await writeFile('dist/index.html',html.replace('<head>',`<head><meta http-equiv="Content-Security-Policy" content="${security.CONTENT_POLICY}">`));
 const assets = (await readdir('dist/assets')).map(name=>`./assets/${name}`);
 const audio = (await readdir('dist/audio')).map(name=>`./audio/${name}`);
 const art = (await readdir('dist/art')).map(name=>`./art/${name}`);

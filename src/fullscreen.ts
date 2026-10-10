@@ -1,4 +1,5 @@
 interface DesktopWindow {
+  readonly testing?:boolean;
   quit():Promise<void>;
   toggleFullscreen():Promise<boolean>;
   isFullscreen():Promise<boolean>;

@@ -1,0 +1,160 @@
+{
+  "cpu": 4,
+  "url": "http://127.0.0.1:4175/",
+  "frames": 437,
+  "p50": 33.30000000000018,
+  "p95": 66.70000000000073,
+  "p99": 166.6999999999989,
+  "max": 700,
+  "over33": 94,
+  "over50": 27,
+  "steady": {
+    "p95": 50,
+    "p99": 150.10000000000036,
+    "over50": 19
+  },
+  "longTasks": [
+    {
+      "start": 69.5,
+      "duration": 648
+    },
+    {
+      "start": 845.0999999940395,
+      "duration": 179
+    },
+    {
+      "start": 1024.5999999940395,
+      "duration": 50
+    },
+    {
+      "start": 1088,
+      "duration": 486
+    },
+    {
+      "start": 1624.7999999970198,
+      "duration": 107
+    },
+    {
+      "start": 3799.699999988079,
+      "duration": 628
+    },
+    {
+      "start": 4648.29999999702,
+      "duration": 54
+    },
+    {
+      "start": 5142.899999991059,
+      "duration": 53
+    },
+    {
+      "start": 6300.199999988079,
+      "duration": 79
+    },
+    {
+      "start": 6431.0999999940395,
+      "duration": 91
+    },
+    {
+      "start": 7328.899999991059,
+      "duration": 64
+    },
+    {
+      "start": 12579.09999999404,
+      "duration": 102
+    },
+    {
+      "start": 12768.89999999106,
+      "duration": 71
+    },
+    {
+      "start": 13105,
+      "duration": 63
+    },
+    {
+      "start": 13619.29999999702,
+      "duration": 52
+    }
+  ],
+  "topCPU": [
+    {
+      "fn": "finishFrame http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 9097.369
+    },
+    {
+      "fn": "(program) ",
+      "milliseconds": 4095.123
+    },
+    {
+      "fn": "(idle) ",
+      "milliseconds": 675.696
+    },
+    {
+      "fn": "pe http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 457.713
+    },
+    {
+      "fn": "r http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 332.819
+    },
+    {
+      "fn": "render http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 239.866
+    },
+    {
+      "fn": "resize http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 217.392
+    },
+    {
+      "fn": "unlock http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 188.165
+    },
+    {
+      "fn": "buildBackplate http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 151.728
+    },
+    {
+      "fn": "(garbage collector) ",
+      "milliseconds": 138.797
+    },
+    {
+      "fn": "drawSky http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 133.504
+    },
+    {
+      "fn": "drawPlatform http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 89.234
+    },
+    {
+      "fn": "Kt http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 86.534
+    },
+    {
+      "fn": "P http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 83.232
+    },
+    {
+      "fn": "drawBackplate http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 73.351
+    },
+    {
+      "fn": "paintBackdropTile http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 72.605
+    },
+    {
+      "fn": "drawLayers http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 71
+    },
+    {
+      "fn": " http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 69.162
+    },
+    {
+      "fn": "Jt http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 66.643
+    },
+    {
+      "fn": "h http://127.0.0.1:4175/assets/index-cOiYTgZA.js",
+      "milliseconds": 66.128
+    }
+  ]
+}
